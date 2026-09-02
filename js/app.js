@@ -9,6 +9,7 @@ import { getSwissimageTimestamps, identifyFlightInfo } from './geoadmin.js';
 import { Timeline } from './timeline.js';
 import { Overlays, listThemeLayers } from './overlays.js';
 import { setupSearch } from './search.js';
+import { setupUpscale } from './upscale-ui.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -18,6 +19,10 @@ const ui = {
   slider: $('#year-slider'),
   sliderMin: $('#slider-min'),
   sliderMax: $('#slider-max'),
+  sliderCurrent: $('#slider-current'),
+  btnUpscale: $('#btn-upscale'),
+  upscalePanel: $('#upscale-panel'),
+  frame: $('#frame'),
   btnPrev: $('#btn-prev'),
   btnNext: $('#btn-next'),
   btnPlay: $('#btn-play'),
@@ -66,6 +71,7 @@ map.on('error', (e) => {
 
 let timeline = null;
 let overlays = null;
+let upscaleCtl = null;
 let flightCache = new Map();
 let metaController = null;
 let metaTimer = null;
@@ -81,6 +87,17 @@ map.on('load', async () => {
   setupControls();
   setupLayersPanel();
   setupInfoPanel();
+  upscaleCtl = setupUpscale({
+    map,
+    button: ui.btnUpscale,
+    panel: ui.upscalePanel,
+    frame: ui.frame,
+    getEntries: () => timeline.entries,
+    getCurrentTs: () => timeline.current.ts,
+    closeOthers: closePanels,
+    onToggle: syncPanelState,
+    toast,
+  });
   setupSearch({
     input: ui.searchInput,
     results: ui.searchResults,
@@ -108,11 +125,15 @@ function setupSlider() {
   s.value = String(timeline.index);
   ui.sliderMin.textContent = String(timeline.entries[0].year);
   ui.sliderMax.textContent = String(timeline.entries[timeline.length - 1].year);
+  ui.sliderCurrent.textContent = `Jahrgang ${timeline.current.year}`;
   s.addEventListener('input', () => {
     stopPlay();
     timeline.show(Number(s.value));
   });
-  timeline.onChange((_, i) => { if (Number(s.value) !== i) s.value = String(i); });
+  timeline.onChange((entry, i) => {
+    if (Number(s.value) !== i) s.value = String(i);
+    ui.sliderCurrent.textContent = `Jahrgang ${entry.year}`;
+  });
 }
 
 function setupControls() {
@@ -155,18 +176,15 @@ function renderYear() {
     // Noch nicht ermittelt: Jahrgang anzeigen, gedämpft.
     big.textContent = String(entry.year);
     big.classList.add('is-provisional');
-    ui.yearSub.textContent = `Jahrgang ${entry.year} · Aufnahmejahr wird ermittelt …`;
+    ui.yearSub.textContent = 'Bildaufnahme vom: …';
   } else if (info === null) {
     big.textContent = String(entry.year);
     big.classList.add('is-provisional');
-    ui.yearSub.textContent = `Jahrgang ${entry.year} · hier kein Luftbild in diesem Jahrgang`;
+    ui.yearSub.textContent = 'Hier kein Luftbild in diesem Jahrgang';
   } else {
     big.textContent = String(info.year);
     big.classList.remove('is-provisional');
-    const when = info.date ? `geflogen am ${info.date}` : `geflogen ${info.year}`;
-    ui.yearSub.textContent = info.year === entry.year
-      ? `Jahrgang ${entry.year} · ${when}`
-      : `Jahrgang ${entry.year} · ${when}`;
+    ui.yearSub.textContent = info.date ? `Bildaufnahme vom: ${info.date}` : `Bildaufnahme: ${info.year}`;
   }
 }
 
@@ -198,7 +216,7 @@ async function fetchMeta() {
   } catch (err) {
     if (err?.name === 'AbortError') return;
     console.warn('Aufnahmejahr nicht ermittelbar', err);
-    ui.yearSub.textContent = `Jahrgang ${entry.year} · Aufnahmejahr nicht verfügbar`;
+    ui.yearSub.textContent = 'Bildaufnahme: Datum nicht verfügbar';
     return;
   }
   if (signal.aborted) return;
@@ -378,6 +396,7 @@ function togglePanel(panel, open) {
   panel.hidden = !willOpen;
   ui.btnLayers.setAttribute('aria-expanded', String(panel === ui.layersPanel && willOpen));
   ui.btnInfo.setAttribute('aria-expanded', String(panel === ui.infoPanel && willOpen));
+  syncPanelState();
 }
 
 function closePanels() {
@@ -385,6 +404,15 @@ function closePanels() {
   ui.infoPanel.hidden = true;
   ui.btnLayers.setAttribute('aria-expanded', 'false');
   ui.btnInfo.setAttribute('aria-expanded', 'false');
+  if (upscaleCtl?.isOpen()) upscaleCtl.close();
+  syncPanelState();
+}
+
+// Auf kleinen Bildschirmen verdecken offene Panels die Seitenknöpfe; diese
+// werden dann ausgeblendet (Schliessen über das × im Panel).
+function syncPanelState() {
+  const anyOpen = !ui.layersPanel.hidden || !ui.infoPanel.hidden || !ui.upscalePanel.hidden;
+  document.body.classList.toggle('has-panel', anyOpen);
 }
 
 let toastTimer = null;
