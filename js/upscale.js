@@ -22,10 +22,12 @@ const PAD = 8;                 // Überlappung, damit keine Nähte entstehen
 const EARTH = 40075016.686;
 
 export const METHODS = [
+  { key: 'realesrgan', label: 'KI · Real-ESRGAN', kind: 'realesrgan',
+    note: 'Auf echten Fotos trainiert, mit regelbarer Glättung (Rauschunterdrückung). Ruhiges, natürliches Ergebnis; rechnet am längsten.' },
   { key: 'esrgan-medium', label: 'KI · ESRGAN gründlich', kind: 'ai', model: 'medium',
-    note: 'Neuronales Netz mit 64 Schichten. Beste Rekonstruktion von Kanten und Texturen, braucht am längsten.' },
+    note: 'Betont Kanten und Texturen stark, kann körnig wirken.' },
   { key: 'esrgan-slim', label: 'KI · ESRGAN schnell', kind: 'ai', model: 'slim',
-    note: 'Kleineres Netz, etwa dreimal schneller, etwas weicher.' },
+    note: 'Kleineres Netz, schneller, ebenfalls eher körnig.' },
   { key: 'lanczos', label: 'Lanczos-Filter', kind: 'classic',
     note: 'Klassische Interpolation mit Nachschärfung. Keine erfundenen Details, kein Rauschen.' },
   { key: 'bicubic', label: 'Bikubisch', kind: 'classic',
@@ -150,9 +152,10 @@ function loadScript(src) {
 // Vergrössern
 
 /** Führt die gewählte Methode aus. Liefert die Ergebnis-Leinwand. */
-export async function upscale(source, method, factor, { onProgress, onStatus, signal } = {}) {
+export async function upscale(source, method, factor, { onProgress, onStatus, signal, denoise = 0.5 } = {}) {
   const m = METHODS.find((x) => x.key === method);
   if (!m) throw new Error(`Unbekannte Methode ${method}`);
+  if (m.kind === 'realesrgan') return realesrganUpscale(source, factor, denoise, { onProgress, onStatus, signal });
   if (m.kind === 'ai') return aiUpscale(source, m.model, factor, { onProgress, onStatus, signal });
   if (method === 'lanczos') return lanczos(source, factor, onProgress);
   return canvasScale(source, factor, method === 'nearest');
@@ -170,14 +173,146 @@ function canvasScale(source, factor, pixelated) {
 }
 
 async function lanczos(source, factor, onProgress) {
-  const out = document.createElement('canvas');
-  out.width = source.width * factor;
-  out.height = source.height * factor;
-  if (typeof window.pica !== 'function') await loadScript('vendor/pica/pica.min.js');
-  const p = window.pica();
-  await p.resize(source, out, { filter: 'lanczos3', unsharpAmount: 60, unsharpRadius: 0.6, unsharpThreshold: 2 });
+  const out = await picaResize(source, source.width * factor, source.height * factor, { unsharpAmount: 60, unsharpRadius: 0.6, unsharpThreshold: 2 });
   onProgress?.(1);
   return out;
+}
+
+async function picaResize(source, width, height, opts = {}) {
+  const out = document.createElement('canvas');
+  out.width = width;
+  out.height = height;
+  if (typeof window.pica !== 'function') await loadScript('vendor/pica/pica.min.js');
+  await window.pica().resize(source, out, { filter: 'lanczos3', ...opts });
+  return out;
+}
+
+// --- Real-ESRGAN (SRVGGNetCompact «realesr-general-x4v3») ----------------------
+//
+// Das Netz rechnet auf der Eingangsauflösung (33 Faltungen à 64 Kanäle mit PReLU)
+// und ordnet zum Schluss die Kanäle zu 4×4-Pixelblöcken um (Pixel-Shuffle); dazu
+// kommt das 4-fach vergrösserte Original als Basis. Die «Glättung» mischt die
+// Gewichte des normalen und des rauschunterdrückenden Modells («wdn») linear,
+// genau wie denoise_strength im Original.
+
+const RESR_PATCH = 96;
+const RESR_PAD = 12;
+let resrFiles = null;   // {manifest, general, wdn}
+let resrNet = null;     // {denoise, layers:[{type, w, b, a}]}
+
+async function loadRealesrganFiles(onStatus) {
+  if (!resrFiles) {
+    onStatus?.('Real-ESRGAN-Modell wird geladen (9.7 MB) …');
+    resrFiles = Promise.all([
+      fetch('vendor/realesrgan/manifest.json').then((r) => r.json()),
+      fetch('vendor/realesrgan/general.bin').then((r) => r.arrayBuffer()),
+      fetch('vendor/realesrgan/wdn.bin').then((r) => r.arrayBuffer()),
+    ]).then(([manifest, g, w]) => ({ manifest, general: new Float32Array(g), wdn: new Float32Array(w) }))
+      .catch((err) => { resrFiles = null; throw err; });
+  }
+  return resrFiles;
+}
+
+function buildRealesrgan(tf, files, denoise) {
+  const { manifest, general, wdn } = files;
+  const s = Math.max(0, Math.min(1, denoise));
+  const mixed = new Float32Array(general.length);
+  for (let i = 0; i < mixed.length; i++) mixed[i] = (1 - s) * general[i] + s * wdn[i];
+  const take = ({ offset, shape }) => tf.tensor(mixed.subarray(offset, offset + shape.reduce((a, b) => a * b, 1)), shape);
+  const layers = manifest.layers.map((l) => (l.type === 'conv'
+    ? { type: 'conv', w: take(l.w), b: take(l.b) }
+    : { type: 'prelu', a: take(l.a) }));
+  return { denoise: s, scale: manifest.scale, layers };
+}
+
+function disposeRealesrgan(net) {
+  for (const l of net.layers) for (const k of ['w', 'b', 'a']) l[k]?.dispose();
+}
+
+/** Vorwärtsrechnung: x [1,h,w,3] im Bereich 0–1 → [1,4h,4w,3] */
+function realesrganForward(tf, net, x) {
+  return tf.tidy(() => {
+    let out = x;
+    for (const l of net.layers) {
+      out = l.type === 'conv' ? tf.conv2d(out, l.w, 1, 'same').add(l.b) : tf.prelu(out, l.a);
+    }
+    out = tf.depthToSpace(out, net.scale);
+    const base = tf.image.resizeNearestNeighbor(x, [x.shape[1] * net.scale, x.shape[2] * net.scale]);
+    return out.add(base);
+  });
+}
+
+async function getRealesrgan(tf, denoise, onStatus) {
+  const files = await loadRealesrganFiles(onStatus);
+  if (!resrNet || Math.abs(resrNet.denoise - denoise) > 1e-6) {
+    if (resrNet) disposeRealesrgan(resrNet);
+    resrNet = buildRealesrgan(tf, files, denoise);
+  }
+  return resrNet;
+}
+
+async function realesrganUpscale(source, factor, denoise, { onProgress, onStatus, signal }) {
+  await ensureBackend(onStatus);
+  const tf = window.tf;
+  const net = await getRealesrgan(tf, denoise, onStatus);
+  onStatus?.('Berechne …');
+
+  const W = source.width, H = source.height, s = net.scale;
+  const out = document.createElement('canvas');
+  out.width = W * s;
+  out.height = H * s;
+  const ctx = out.getContext('2d');
+  const cols = Math.ceil(W / RESR_PATCH), rows = Math.ceil(H / RESR_PATCH);
+  const padded = tf.tidy(() => {
+    const img = tf.browser.fromPixels(source).toFloat().div(255);
+    const padW = cols * RESR_PATCH - W, padH = rows * RESR_PATCH - H;
+    const paddings = [[RESR_PAD, RESR_PAD + padH], [RESR_PAD, RESR_PAD + padW], [0, 0]];
+    const mirrorOk = RESR_PAD + padH <= H && RESR_PAD + padW <= W;
+    return mirrorOk ? tf.mirrorPad(img, paddings, 'symmetric') : tf.pad(img, paddings, 0);
+  });
+  const size = RESR_PATCH + 2 * RESR_PAD;
+  let n = 0;
+  try {
+    for (let py = 0; py < rows; py++) {
+      for (let px = 0; px < cols; px++) {
+        if (signal?.aborted) throw new DOMException('Abgebrochen', 'AbortError');
+        const pixels = tf.tidy(() => {
+          const patch = padded.slice([py * RESR_PATCH, px * RESR_PATCH, 0], [size, size, 3]).expandDims(0);
+          const pred = realesrganForward(tf, net, patch);
+          const crop = pred.slice([0, RESR_PAD * s, RESR_PAD * s, 0], [1, RESR_PATCH * s, RESR_PATCH * s, 3]);
+          return crop.squeeze([0]).clipByValue(0, 1).mul(255).round().toInt();
+        });
+        const data = await tf.browser.toPixels(pixels);
+        pixels.dispose();
+        ctx.putImageData(new ImageData(data, RESR_PATCH * s, RESR_PATCH * s), px * RESR_PATCH * s, py * RESR_PATCH * s);
+        n++;
+        onProgress?.(n / (rows * cols));
+        await tf.nextFrame();
+      }
+    }
+  } finally {
+    padded.dispose();
+  }
+  if (factor === s) return out;
+  // Das Netz rechnet fest 4-fach; kleinere Faktoren durch sauberes Verkleinern.
+  onStatus?.('Verkleinere auf den gewählten Faktor …');
+  return picaResize(out, W * factor, H * factor);
+}
+
+// Für Tests: direkter Zugriff auf die Vorwärtsrechnung.
+if (typeof window !== 'undefined') {
+  window.__upscaleDebug = {
+    async realesrganForward(data, h, w, denoise) {
+      await ensureBackend();
+      const tf = window.tf;
+      const net = await getRealesrgan(tf, denoise);
+      const x = tf.tensor4d(data, [1, h, w, 3]);
+      const y = realesrganForward(tf, net, x);
+      const res = Array.from(await y.data());
+      x.dispose(); y.dispose();
+      return res;
+    },
+  };
 }
 
 // --- KI (ESRGAN über TensorFlow.js) ------------------------------------------

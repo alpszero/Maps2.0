@@ -137,6 +137,15 @@
       <div class="up-label">Methode</div>
       <div id="up-methods" class="up-methods"></div>
 
+      <div id="up-denoise-row" class="up-denoise">
+        <div class="up-row up-result-head">
+          <span class="up-label">Glättung</span>
+          <span id="up-denoise-label" class="up-meta">50 %</span>
+        </div>
+        <input id="up-denoise" type="range" min="0" max="1" step="0.05" value="0.5" aria-label="Glättung (Rauschunterdrückung)">
+        <div class="up-hint">0 % belässt Körnung und feine Struktur, 100 % glättet Rauschen am stärksten.</div>
+      </div>
+
       <div class="up-row">
         <span class="up-label">Faktor</span>
         <div id="up-factors" class="segmented" role="group" aria-label="Vergrösserungsfaktor"></div>

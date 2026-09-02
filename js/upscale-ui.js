@@ -19,6 +19,9 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
     back: $('#up-back', panel),
     methods: $('#up-methods', panel),
     factors: $('#up-factors', panel),
+    denoiseRow: $('#up-denoise-row', panel),
+    denoise: $('#up-denoise', panel),
+    denoiseLabel: $('#up-denoise-label', panel),
     run: $('#up-run', panel),
     cancel: $('#up-cancel', panel),
     progress: $('#up-progress', panel),
@@ -41,8 +44,18 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
     result: null,      // {canvas, method, factor, ms}
     method: METHODS[0].key,
     factor: 2,
+    denoise: 0.5,
     controller: null,
   };
+
+  function syncMethodOptions() {
+    const m = METHODS.find((x) => x.key === state.method);
+    ui.denoiseRow.hidden = m?.kind !== 'realesrgan';
+  }
+  ui.denoise.addEventListener('input', () => {
+    state.denoise = Number(ui.denoise.value);
+    ui.denoiseLabel.textContent = `${Math.round(state.denoise * 100)} %`;
+  });
 
   // --- Methoden & Faktoren --------------------------------------------------
   for (const m of METHODS) {
@@ -54,9 +67,10 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
     input.checked = m.key === state.method;
     $('.up-method-name', label).textContent = m.label;
     $('.up-method-note', label).textContent = m.note;
-    input.addEventListener('change', () => { if (input.checked) state.method = m.key; });
+    input.addEventListener('change', () => { if (input.checked) { state.method = m.key; syncMethodOptions(); } });
     ui.methods.appendChild(label);
   }
+  syncMethodOptions();
   for (const f of FACTORS) {
     const b = document.createElement('button');
     b.type = 'button';
@@ -197,11 +211,12 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
     try {
       const canvas = await upscale(state.source.canvas, state.method, state.factor, {
         signal: state.controller.signal,
+        denoise: state.denoise,
         onProgress: (p) => { ui.progressBar.style.width = `${Math.round(p * 100)}%`; },
         onStatus: (s) => { ui.status.textContent = s; },
       });
       const ms = performance.now() - t0;
-      state.result = { canvas, method: method.key, factor: state.factor, ms };
+      state.result = { canvas, method: method.key, factor: state.factor, denoise: state.denoise, ms };
       showResult();
     } catch (err) {
       if (err?.name === 'AbortError') ui.status.textContent = 'Abgebrochen.';
@@ -239,7 +254,8 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
     applyDivider();
     applyFit();
     const secs = r.ms >= 1000 ? `${(r.ms / 1000).toFixed(1)} s` : `${Math.round(r.ms)} ms`;
-    ui.resultMeta.textContent = `${method.label} · ${r.factor}× · ${r.canvas.width} × ${r.canvas.height} px · ≈ ${formatMeters(s.metersPerPx / r.factor)}/px · ${secs}`;
+    const extra = method.kind === 'realesrgan' ? ` · Glättung ${Math.round(r.denoise * 100)} %` : '';
+    ui.resultMeta.textContent = `${method.label}${extra} · ${r.factor}× · ${r.canvas.width} × ${r.canvas.height} px · ≈ ${formatMeters(s.metersPerPx / r.factor)}/px · ${secs}`;
     ui.result.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
   }
 
