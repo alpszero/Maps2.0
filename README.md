@@ -78,21 +78,26 @@ vendor/pica/          pica, Lanczos-Skalierung (MIT)
   Ausschnitte werden auf einer tieferen Stufe geladen.
 * **Bildstand**: «Aktuellster Stand» (Zeitstempel `current` des WMTS, also die
   neusten Aufnahmen) oder ein beliebiger Jahrgang.
-* **Methoden**: ESRGAN gründlich (64 Schichten) und ESRGAN schnell, beide 2× und 4×,
-  gerechnet mit TensorFlow.js auf der Grafikeinheit des Geräts, patchweise
-  (64 px plus 8 px Überlappung, damit keine Nähte entstehen). Dazu Lanczos mit
-  Nachschärfung (pica), bikubisch (Browser) und Pixelwiederholung als Referenz.
+* **Methoden**: Real-ESRGAN (Modell «realesr-general-x4v3», 33 Faltungsschichten,
+  mit regelbarer Glättung), ESRGAN gründlich und ESRGAN schnell, alle 2× und 4×,
+  gerechnet mit TensorFlow.js auf der Grafikeinheit des Geräts, patchweise mit
+  Überlappung, damit keine Nähte entstehen. Dazu Lanczos mit Nachschärfung (pica),
+  bikubisch (Browser) und Pixelwiederholung als Referenz.
+* **Glättung** (nur Real-ESRGAN): mischt die Gewichte des normalen und des
+  rauschunterdrückenden Modells linear, entsprechend `denoise_strength` im
+  Original. 0 % belässt Körnung, 100 % glättet am stärksten; Vorgabe 50 %.
+  Das Netz rechnet fest 4-fach; 2× entsteht durch sauberes Verkleinern (Lanczos).
 * **Ergebnis**: Vorher/Nachher-Schieber, 1:1-Ansicht, PNG-Download, Öffnen im
   neuen Tab. Es verlässt kein Bild das Gerät.
 
 Zu den Modellen: Es gibt derzeit kein fertiges, im Browser lauffähiges
-Super-Resolution-Modell, das speziell auf Luftbilder trainiert wurde; die
-Forschung dazu (etwa Real-ESRGAN mit Orthofoto-Feinabstimmung) liegt als
-PyTorch-Gewichte vor und müsste erst konvertiert werden. Die eingebauten
-ESRGAN-Modelle sind auf allgemeine Fotografien (DIV2K) trainiert. Sie schärfen
-Kanten und Texturen von Dächern, Strassen und Vegetation gut, können aber Details
-erfinden, die in der Aufnahme nicht existieren. Für messbare Aussagen bleibt die
-Lanczos-Variante die ehrlichere Wahl.
+Super-Resolution-Modell, das speziell auf Luftbilder trainiert wurde. Real-ESRGAN
+wurde mit `vendor/realesrgan/convert.py` ohne PyTorch aus den Original-Gewichten
+umgewandelt und in TensorFlow.js nachgebaut (`js/upscale.js`); die Vorwärtsrechnung
+ist gegen eine NumPy-Referenz geprüft. Alle Modelle sind auf allgemeine Fotografien
+trainiert. Sie schärfen Kanten und Texturen von Dächern, Strassen und Vegetation
+gut, können aber Details erfinden, die in der Aufnahme nicht existieren. Für
+messbare Aussagen bleibt die Lanczos-Variante die ehrlichere Wahl.
 
 ### Wie der Jahrgangswechsel flüssig bleibt
 
