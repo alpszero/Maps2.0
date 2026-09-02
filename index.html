@@ -39,6 +39,9 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
       <span id="layers-badge" class="badge" hidden></span>
     </button>
+    <button id="btn-upscale" class="fab" type="button" aria-label="Hochskalieren mit KI" title="Hochskalieren mit KI" aria-expanded="false" aria-controls="upscale-panel">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 15v5h-5M4 4l6 6M20 20l-6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 3.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z" fill="currentColor"/></svg>
+    </button>
     <button id="btn-info" class="fab" type="button" aria-label="Über die Daten" title="Über die Daten" aria-expanded="false" aria-controls="info-panel">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 10.5v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="7.5" r="1.25" fill="currentColor"/></svg>
     </button>
@@ -51,7 +54,7 @@
       </button>
       <div class="slider-wrap">
         <input id="year-slider" type="range" min="0" max="0" value="0" aria-label="Jahrgang wählen">
-        <div class="slider-scale"><span id="slider-min"></span><span id="slider-max"></span></div>
+        <div class="slider-scale"><span id="slider-min"></span><span id="slider-current" class="slider-current"></span><span id="slider-max"></span></div>
       </div>
       <button id="btn-next" class="step" type="button" aria-label="Späterer Jahrgang">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -90,6 +93,8 @@
       <p>Abgedeckt ist nur die Schweiz, und nicht jeder Jahrgang deckt jeden Ort ab – wo nicht geflogen wurde, bleibt die Fläche leer.</p>
       <h3>Zusatzebenen</h3>
       <p>Über den Ebenen-Knopf lassen sich Fachdaten über das Luftbild legen, mit regelbarer Deckkraft: Wasser, Laser &amp; Gelände, Radar &amp; Wetter, Telekommunikation. Die Liste wird aus dem Verzeichnis des Geoportals gelesen; neue oder umbenannte Ebenen erscheinen von selbst.</p>
+      <h3>Hochskalieren</h3>
+      <p>Über den Vergrössern-Knopf lässt sich ein Ausschnitt der Luftbilder im Browser 2- oder 4-fach hochrechnen: mit einem neuronalen Netz (ESRGAN, zwei Grössen) oder klassischen Filtern (Lanczos, bikubisch, Pixelwiederholung). Alles rechnet das eigene Gerät, es wird kein Bild hochgeladen. Die KI-Modelle sind auf allgemeine Fotografien trainiert; sie schärfen Kanten und Texturen, können aber Details erfinden, die so nicht existieren.</p>
       <h3>Bedienung</h3>
       <ul>
         <li>Regler ziehen oder ◀ ▶ tippen; Pfeiltasten und Leertaste funktionieren auch.</li>
@@ -97,6 +102,72 @@
         <li>Suche oben: jede Adresse oder jeder Ort in der Schweiz.</li>
       </ul>
       <p class="fineprint">Luftbilder und Fachdaten © swisstopo und Bundesämter, Nutzung gemäss <a href="https://www.geo.admin.ch/de/allgemeine-nutzungsbedingungen-bgdi" target="_blank" rel="noopener">Nutzungsbedingungen BGDI</a>. Karte: MapLibre GL JS.</p>
+    </div>
+  </section>
+
+  <div id="frame" class="frame" hidden aria-hidden="true"><div class="frame-box"></div></div>
+
+  <section id="upscale-panel" class="panel" hidden aria-label="Hochskalieren">
+    <div class="panel-head">
+      <h2>Hochskalieren</h2>
+      <button class="panel-close" type="button" aria-label="Schliessen">×</button>
+    </div>
+
+    <div id="up-step1" class="up-step">
+      <label class="up-field">
+        <span class="up-label">Bildstand</span>
+        <select id="up-year"></select>
+      </label>
+      <div id="up-info" class="up-info">–</div>
+      <div id="up-hint" class="up-hint"></div>
+      <progress id="up-capture-progress" class="up-capture-progress" max="1" value="0" hidden></progress>
+      <button id="up-capture" class="btn-primary" type="button">Ausschnitt übernehmen</button>
+    </div>
+
+    <div id="up-step2" class="up-step up-body" hidden>
+      <div class="up-source">
+        <canvas id="up-thumb" class="up-thumb" width="160" height="160"></canvas>
+        <div class="up-source-text">
+          <div class="up-label">Quellbild</div>
+          <div id="up-src-meta" class="up-meta"></div>
+          <button id="up-back" class="btn-link" type="button">Anderen Ausschnitt wählen</button>
+        </div>
+      </div>
+
+      <div class="up-label">Methode</div>
+      <div id="up-methods" class="up-methods"></div>
+
+      <div class="up-row">
+        <span class="up-label">Faktor</span>
+        <div id="up-factors" class="segmented" role="group" aria-label="Vergrösserungsfaktor"></div>
+      </div>
+
+      <div class="up-row">
+        <button id="up-run" class="btn-primary" type="button">Hochskalieren</button>
+        <button id="up-cancel" class="btn-secondary" type="button" hidden>Abbrechen</button>
+      </div>
+      <div id="up-progress" class="up-progress" hidden><div id="up-progress-bar" class="up-progress-bar"></div></div>
+      <div id="up-status" class="up-status" aria-live="polite"></div>
+
+      <div id="up-result" class="up-result" hidden>
+        <div class="up-row up-result-head">
+          <span class="up-label">Vorher / Nachher</span>
+          <button id="up-fit" class="btn-link" type="button">1:1 anzeigen</button>
+        </div>
+        <div id="up-compare" class="up-compare is-fit">
+          <div class="up-compare-inner">
+            <canvas id="up-after"></canvas>
+            <canvas id="up-before"></canvas>
+            <div class="up-split-line"></div>
+          </div>
+          <input id="up-divider" class="up-divider" type="range" min="0" max="100" value="50" aria-label="Vergleichsposition">
+        </div>
+        <div id="up-result-meta" class="up-meta"></div>
+        <div class="up-row">
+          <button id="up-download" class="btn-primary" type="button">PNG herunterladen</button>
+          <button id="up-open" class="btn-secondary" type="button">Im Browser öffnen</button>
+        </div>
+      </div>
     </div>
   </section>
 
