@@ -1,0 +1,16 @@
+{
+  "name": "Zeitreise Luftbilder",
+  "short_name": "Zeitreise",
+  "description": "Wie sah ein Ort in der Schweiz früher aus? Luftbilder von swisstopo, Jahrgang für Jahrgang.",
+  "lang": "de",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0c1117",
+  "theme_color": "#0c1117",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

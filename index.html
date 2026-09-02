@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Zeitreise Luftbilder</title>
+  <meta name="description" content="Wie sah ein Ort in der Schweiz früher aus? Luftbilder von swisstopo, Jahrgang für Jahrgang.">
+  <meta name="theme-color" content="#0c1117">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Zeitreise">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon.svg">
+  <link rel="stylesheet" href="vendor/maplibre-gl/maplibre-gl.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="map" role="application" aria-label="Luftbildkarte"></div>
+
+  <header class="topbar">
+    <div class="search" role="combobox" aria-haspopup="listbox" aria-owns="search-results" aria-expanded="false">
+      <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16.5 16.5 21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="search-input" type="search" placeholder="Adresse oder Ort in der Schweiz" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Adresse oder Ort suchen" aria-autocomplete="list" aria-controls="search-results">
+      <ul id="search-results" role="listbox" hidden></ul>
+    </div>
+  </header>
+
+  <div class="year" aria-live="polite">
+    <div id="year-big" class="year-big">–</div>
+    <div id="year-sub" class="year-sub">Jahrgänge werden geladen …</div>
+  </div>
+
+  <div class="side">
+    <button id="btn-locate" class="fab" type="button" aria-label="Eigener Standort" title="Eigener Standort">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+    <button id="btn-layers" class="fab" type="button" aria-label="Zusatzebenen" title="Zusatzebenen" aria-expanded="false" aria-controls="layers-panel">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      <span id="layers-badge" class="badge" hidden></span>
+    </button>
+    <button id="btn-info" class="fab" type="button" aria-label="Über die Daten" title="Über die Daten" aria-expanded="false" aria-controls="info-panel">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 10.5v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="7.5" r="1.25" fill="currentColor"/></svg>
+    </button>
+  </div>
+
+  <footer class="bottombar">
+    <div class="slider-card">
+      <button id="btn-prev" class="step" type="button" aria-label="Früherer Jahrgang">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="slider-wrap">
+        <input id="year-slider" type="range" min="0" max="0" value="0" aria-label="Jahrgang wählen">
+        <div class="slider-scale"><span id="slider-min"></span><span id="slider-max"></span></div>
+      </div>
+      <button id="btn-next" class="step" type="button" aria-label="Späterer Jahrgang">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button id="btn-play" class="step play" type="button" aria-label="Abspielen">
+        <svg class="ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+        <svg class="ico-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>
+      </button>
+    </div>
+    <div id="attribution" class="attribution">© swisstopo</div>
+  </footer>
+
+  <section id="layers-panel" class="panel" hidden aria-label="Zusatzebenen">
+    <div class="panel-head">
+      <h2>Zusatzebenen</h2>
+      <button class="panel-close" type="button" aria-label="Schliessen">×</button>
+    </div>
+    <p class="panel-lead">Fachdaten des Bundes-Geoportals über dem Luftbild. Die Liste wird aus dem Verzeichnis von geo.admin.ch gelesen.</p>
+    <div id="themes"></div>
+  </section>
+
+  <section id="info-panel" class="panel" hidden aria-label="Über die Daten">
+    <div class="panel-head">
+      <h2>Zeitreise Luftbilder</h2>
+      <button class="panel-close" type="button" aria-label="Schliessen">×</button>
+    </div>
+    <div class="panel-body">
+      <p>Die App zeigt, wie ein Ort in der Schweiz früher aussah. Sie springt auf den eigenen Standort, und mit dem Schieberegler wandert man durch die Jahrzehnte: dieselbe Stelle, Jahrgang für Jahrgang, als Luftbild von oben. Gross oben steht das Jahr, in dem tatsächlich geflogen wurde.</p>
+      <h3>Woher die Daten kommen</h3>
+      <p>Alles stammt von swisstopo, dem Bundesamt für Landestopografie, über die offenen Dienste des Bundes-Geoportals (<a href="https://www.geo.admin.ch/" target="_blank" rel="noopener">geo.admin.ch</a>):</p>
+      <ul>
+        <li><strong>Luftbilder:</strong> SWISSIMAGE Zeitreise – die Sammlung der Orthofoto-Mosaike der Schweiz. Historische Jahrgänge sind schwarzweiss, neuere in Farbe.</li>
+        <li><strong>Aufnahmejahr:</strong> aus den Metadaten derselben Sammlung. Die Angabe gilt für die Kachel unter der Bildmitte – der Flug fand oft ein Jahr vor der Veröffentlichung des Jahrgangs statt.</li>
+        <li><strong>Ortssuche:</strong> Adress- und Ortsverzeichnis des Bundes.</li>
+      </ul>
+      <p>Abgedeckt ist nur die Schweiz, und nicht jeder Jahrgang deckt jeden Ort ab – wo nicht geflogen wurde, bleibt die Fläche leer.</p>
+      <h3>Zusatzebenen</h3>
+      <p>Über den Ebenen-Knopf lassen sich Fachdaten über das Luftbild legen, mit regelbarer Deckkraft: Wasser, Laser &amp; Gelände, Radar &amp; Wetter, Telekommunikation. Die Liste wird aus dem Verzeichnis des Geoportals gelesen; neue oder umbenannte Ebenen erscheinen von selbst.</p>
+      <h3>Bedienung</h3>
+      <ul>
+        <li>Regler ziehen oder ◀ ▶ tippen; Pfeiltasten und Leertaste funktionieren auch.</li>
+        <li>▶ spielt alle Jahrgänge nacheinander ab.</li>
+        <li>Suche oben: jede Adresse oder jeder Ort in der Schweiz.</li>
+      </ul>
+      <p class="fineprint">Luftbilder und Fachdaten © swisstopo und Bundesämter, Nutzung gemäss <a href="https://www.geo.admin.ch/de/allgemeine-nutzungsbedingungen-bgdi" target="_blank" rel="noopener">Nutzungsbedingungen BGDI</a>. Karte: MapLibre GL JS.</p>
+    </div>
+  </section>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
