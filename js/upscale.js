@@ -22,8 +22,10 @@ const PAD = 8;                 // Überlappung, damit keine Nähte entstehen
 const EARTH = 40075016.686;
 
 export const METHODS = [
-  { key: 'realesrgan', label: 'KI · Real-ESRGAN', kind: 'realesrgan',
-    note: 'Auf echten Fotos trainiert, mit regelbarer Glättung (Rauschunterdrückung). Ruhiges, natürliches Ergebnis; rechnet am längsten.' },
+  { key: 'x4plus', label: 'KI · Real-ESRGAN x4plus', kind: 'x4plus',
+    note: 'Das grosse Modell (17 Mio. Parameter, 34 MB einmaliger Download). Klare Kanten und Markierungen, kaum Rauschen. Braucht auf dem Handy etwa eine Minute.' },
+  { key: 'realesrgan', label: 'KI · Real-ESRGAN kompakt', kind: 'realesrgan',
+    note: 'Kleines, schnelles Modell mit regelbarer Glättung. Verändert das Bild nur sanft.' },
   { key: 'esrgan-medium', label: 'KI · ESRGAN gründlich', kind: 'ai', model: 'medium',
     note: 'Betont Kanten und Texturen stark, kann körnig wirken.' },
   { key: 'esrgan-slim', label: 'KI · ESRGAN schnell', kind: 'ai', model: 'slim',
@@ -155,6 +157,7 @@ function loadScript(src) {
 export async function upscale(source, method, factor, { onProgress, onStatus, signal, denoise = 0.5 } = {}) {
   const m = METHODS.find((x) => x.key === method);
   if (!m) throw new Error(`Unbekannte Methode ${method}`);
+  if (m.kind === 'x4plus') return x4plusUpscale(source, factor, { onProgress, onStatus, signal });
   if (m.kind === 'realesrgan') return realesrganUpscale(source, factor, denoise, { onProgress, onStatus, signal });
   if (m.kind === 'ai') return aiUpscale(source, m.model, factor, { onProgress, onStatus, signal });
   if (method === 'lanczos') return lanczos(source, factor, onProgress);
@@ -299,7 +302,172 @@ async function realesrganUpscale(source, factor, denoise, { onProgress, onStatus
   return picaResize(out, W * factor, H * factor);
 }
 
-// Für Tests: direkter Zugriff auf die Vorwärtsrechnung.
+// --- Real-ESRGAN x4plus (RRDBNet) ---------------------------------------------
+//
+// Das grosse Modell: 23 «Residual-in-Residual Dense Blocks» mit je drei dicht
+// verbundenen Blöcken à fünf Faltungen (64 Merkmale, 32 Wachstumskanäle), danach
+// zweimal Verdoppeln mit Faltung. Die Gewichte liegen als Float16 vor und werden
+// beim Laden zu Float32 entpackt (16.7 Mio. Werte).
+
+const X4_PATCH = 64;
+const X4_PAD = 10;
+let x4Files = null;   // {manifest, weights: Float32Array}
+let x4Net = null;     // Map name -> tf.Tensor
+
+function halfToFloat(u16) {
+  const out = new Float32Array(u16.length);
+  for (let i = 0; i < u16.length; i++) {
+    const h = u16[i];
+    const s = h & 0x8000 ? -1 : 1;
+    const e = (h >> 10) & 0x1f;
+    const f = h & 0x3ff;
+    if (e === 0) out[i] = s * 2 ** -14 * (f / 1024);
+    else if (e === 31) out[i] = f ? NaN : s * Infinity;
+    else out[i] = s * 2 ** (e - 15) * (1 + f / 1024);
+  }
+  return out;
+}
+
+async function fetchBinary(url, onProgress) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status} für ${url}`);
+  const total = Number(res.headers.get('content-length')) || 0;
+  if (!res.body) return new Uint8Array(await res.arrayBuffer());
+  const reader = res.body.getReader();
+  const chunks = [];
+  let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    got += value.length;
+    onProgress?.(got, total);
+  }
+  const out = new Uint8Array(got);
+  let o = 0;
+  for (const c of chunks) { out.set(c, o); o += c.length; }
+  return out;
+}
+
+async function loadX4Files(onStatus) {
+  if (!x4Files) {
+    x4Files = (async () => {
+      const manifest = await (await fetch('vendor/realesrgan/x4plus.json')).json();
+      const bytes = await fetchBinary('vendor/realesrgan/x4plus.bin', (got, total) => {
+        const mb = (n) => (n / 1048576).toFixed(0);
+        onStatus?.(total ? `Modell wird geladen … ${mb(got)} / ${mb(total)} MB` : `Modell wird geladen … ${mb(got)} MB`);
+      });
+      onStatus?.('Gewichte werden entpackt …');
+      await new Promise((r) => setTimeout(r, 0));
+      const weights = halfToFloat(new Uint16Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 2));
+      return { manifest, weights };
+    })().catch((err) => { x4Files = null; throw err; });
+  }
+  return x4Files;
+}
+
+async function getX4(tf, onStatus) {
+  const files = await loadX4Files(onStatus);
+  if (!x4Net) {
+    const net = new Map();
+    for (const [name, t] of Object.entries(files.manifest.tensors)) {
+      const n = t.shape.reduce((a, b) => a * b, 1);
+      net.set(name, tf.tensor(files.weights.subarray(t.offset, t.offset + n), t.shape));
+    }
+    x4Net = { net, scale: files.manifest.scale, numBlocks: files.manifest.numBlocks };
+  }
+  return x4Net;
+}
+
+/** Vorwärtsrechnung RRDBNet: x [1,h,w,3] im Bereich 0–1 → [1,4h,4w,3] */
+function x4Forward(tf, model, x) {
+  const { net, numBlocks } = model;
+  const conv = (t, name) => tf.conv2d(t, net.get(`${name}.weight`), 1, 'same').add(net.get(`${name}.bias`));
+  const lrelu = (t) => tf.leakyRelu(t, 0.2);
+  const rdb = (input, p) => tf.tidy(() => {
+    const x1 = lrelu(conv(input, `${p}.conv1`));
+    const x2 = lrelu(conv(tf.concat([input, x1], 3), `${p}.conv2`));
+    const x3 = lrelu(conv(tf.concat([input, x1, x2], 3), `${p}.conv3`));
+    const x4 = lrelu(conv(tf.concat([input, x1, x2, x3], 3), `${p}.conv4`));
+    const x5 = conv(tf.concat([input, x1, x2, x3, x4], 3), `${p}.conv5`);
+    return x5.mul(0.2).add(input);
+  });
+  return tf.tidy(() => {
+    const feat = conv(x, 'conv_first');
+    let body = feat;
+    for (let i = 0; i < numBlocks; i++) {
+      const prev = body;
+      body = tf.tidy(() => {
+        let out = prev;
+        for (const r of [1, 2, 3]) {
+          const next = rdb(out, `body.${i}.rdb${r}`);
+          if (out !== prev) out.dispose();
+          out = next;
+        }
+        return out.mul(0.2).add(prev);
+      });
+      if (prev !== feat) prev.dispose();
+    }
+    let f = feat.add(conv(body, 'conv_body'));
+    const [, h, w] = f.shape;
+    f = lrelu(conv(tf.image.resizeNearestNeighbor(f, [h * 2, w * 2]), 'conv_up1'));
+    f = lrelu(conv(tf.image.resizeNearestNeighbor(f, [h * 4, w * 4]), 'conv_up2'));
+    return conv(lrelu(conv(f, 'conv_hr')), 'conv_last');
+  });
+}
+
+async function x4plusUpscale(source, factor, { onProgress, onStatus, signal }) {
+  await ensureBackend(onStatus);
+  const tf = window.tf;
+  const model = await getX4(tf, onStatus);
+  onStatus?.('Berechne … (grosses Modell, bitte Geduld)');
+
+  const W = source.width, H = source.height, s = model.scale;
+  const out = document.createElement('canvas');
+  out.width = W * s;
+  out.height = H * s;
+  const ctx = out.getContext('2d');
+  const cols = Math.ceil(W / X4_PATCH), rows = Math.ceil(H / X4_PATCH);
+  const padded = tf.tidy(() => {
+    const img = tf.browser.fromPixels(source).toFloat().div(255);
+    const padW = cols * X4_PATCH - W, padH = rows * X4_PATCH - H;
+    const paddings = [[X4_PAD, X4_PAD + padH], [X4_PAD, X4_PAD + padW], [0, 0]];
+    const mirrorOk = X4_PAD + padH <= H && X4_PAD + padW <= W;
+    return mirrorOk ? tf.mirrorPad(img, paddings, 'symmetric') : tf.pad(img, paddings, 0);
+  });
+  const size = X4_PATCH + 2 * X4_PAD;
+  let n = 0;
+  const t0 = performance.now();
+  try {
+    for (let py = 0; py < rows; py++) {
+      for (let px = 0; px < cols; px++) {
+        if (signal?.aborted) throw new DOMException('Abgebrochen', 'AbortError');
+        const pixels = tf.tidy(() => {
+          const patch = padded.slice([py * X4_PATCH, px * X4_PATCH, 0], [size, size, 3]).expandDims(0);
+          const pred = x4Forward(tf, model, patch);
+          const crop = pred.slice([0, X4_PAD * s, X4_PAD * s, 0], [1, X4_PATCH * s, X4_PATCH * s, 3]);
+          return crop.squeeze([0]).clipByValue(0, 1).mul(255).round().toInt();
+        });
+        const data = await tf.browser.toPixels(pixels);
+        pixels.dispose();
+        ctx.putImageData(new ImageData(data, X4_PATCH * s, X4_PATCH * s), px * X4_PATCH * s, py * X4_PATCH * s);
+        n++;
+        const total = rows * cols;
+        const remaining = ((performance.now() - t0) / n) * (total - n) / 1000;
+        onProgress?.(n / total);
+        onStatus?.(`Berechne … ${n} / ${total} Kacheln${remaining > 2 ? `, noch etwa ${Math.round(remaining)} s` : ''}`);
+        await tf.nextFrame();
+      }
+    }
+  } finally {
+    padded.dispose();
+  }
+  if (factor === s) return out;
+  onStatus?.('Verkleinere auf den gewählten Faktor …');
+  return picaResize(out, W * factor, H * factor);
+}
+
+// Für Tests: direkter Zugriff auf die Vorwärtsrechnungen.
 if (typeof window !== 'undefined') {
   window.__upscaleDebug = {
     async realesrganForward(data, h, w, denoise) {
@@ -308,6 +476,16 @@ if (typeof window !== 'undefined') {
       const net = await getRealesrgan(tf, denoise);
       const x = tf.tensor4d(data, [1, h, w, 3]);
       const y = realesrganForward(tf, net, x);
+      const res = Array.from(await y.data());
+      x.dispose(); y.dispose();
+      return res;
+    },
+    async x4plusForward(data, h, w) {
+      await ensureBackend();
+      const tf = window.tf;
+      const model = await getX4(tf);
+      const x = tf.tensor4d(data, [1, h, w, 3]);
+      const y = x4Forward(tf, model, x);
       const res = Array.from(await y.data());
       x.dispose(); y.dispose();
       return res;
