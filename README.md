@@ -78,12 +78,16 @@ vendor/pica/          pica, Lanczos-Skalierung (MIT)
   Ausschnitte werden auf einer tieferen Stufe geladen.
 * **Bildstand**: «Aktuellster Stand» (Zeitstempel `current` des WMTS, also die
   neusten Aufnahmen) oder ein beliebiger Jahrgang.
-* **Methoden**: Real-ESRGAN (Modell «realesr-general-x4v3», 33 Faltungsschichten,
-  mit regelbarer Glättung), ESRGAN gründlich und ESRGAN schnell, alle 2× und 4×,
-  gerechnet mit TensorFlow.js auf der Grafikeinheit des Geräts, patchweise mit
-  Überlappung, damit keine Nähte entstehen. Dazu Lanczos mit Nachschärfung (pica),
-  bikubisch (Browser) und Pixelwiederholung als Referenz.
-* **Glättung** (nur Real-ESRGAN): mischt die Gewichte des normalen und des
+* **Methoden**: Real-ESRGAN x4plus (das grosse Modell «RealESRGAN_x4plus», RRDBNet
+  mit 16.7 Mio. Parametern, 34 MB einmaliger Download, klarste Kanten und
+  Markierungen), Real-ESRGAN kompakt (Modell «realesr-general-x4v3», 33
+  Faltungsschichten, mit regelbarer Glättung), ESRGAN gründlich und ESRGAN schnell,
+  alle 2× und 4×, gerechnet mit TensorFlow.js auf der Grafikeinheit des Geräts,
+  patchweise mit Überlappung, damit keine Nähte entstehen. Dazu Lanczos mit
+  Nachschärfung (pica), bikubisch (Browser) und Pixelwiederholung als Referenz.
+  Die Real-ESRGAN-Modelle rechnen fest 4-fach; 2× entsteht durch
+  Lanczos-Verkleinerung des 4-fach-Ergebnisses.
+* **Glättung** (nur Real-ESRGAN kompakt): mischt die Gewichte des normalen und des
   rauschunterdrückenden Modells linear, entsprechend `denoise_strength` im
   Original. 0 % belässt Körnung, 100 % glättet am stärksten; Vorgabe 50 %.
   Das Netz rechnet fest 4-fach; 2× entsteht durch sauberes Verkleinern (Lanczos).
