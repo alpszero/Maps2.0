@@ -10,6 +10,9 @@ import { Timeline } from './timeline.js';
 import { Overlays, listThemeLayers } from './overlays.js';
 import { setupSearch } from './search.js';
 import { setupUpscale } from './upscale-ui.js';
+import { setupAnimate } from './animate-ui.js';
+import { setupQuiz } from './quiz-ui.js';
+import { FrameSelector } from './frame.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -25,6 +28,10 @@ const ui = {
   btnZoomOut: $('#btn-zoom-out'),
   btnZoomNative: $('#btn-zoom-native'),
   upscalePanel: $('#upscale-panel'),
+  btnAnimate: $('#btn-animate'),
+  animatePanel: $('#animate-panel'),
+  btnQuiz: $('#btn-quiz'),
+  quizPanel: $('#quiz-panel'),
   frame: $('#frame'),
   btnPrev: $('#btn-prev'),
   btnNext: $('#btn-next'),
@@ -75,6 +82,8 @@ map.on('error', (e) => {
 let timeline = null;
 let overlays = null;
 let upscaleCtl = null;
+let animateCtl = null;
+let quizCtl = null;
 let flightCache = new Map();
 let metaController = null;
 let metaTimer = null;
@@ -90,13 +99,29 @@ map.on('load', async () => {
   setupControls();
   setupLayersPanel();
   setupInfoPanel();
+  const frame = new FrameSelector(map, ui.frame);
   upscaleCtl = setupUpscale({
-    map,
+    map, frame,
     button: ui.btnUpscale,
     panel: ui.upscalePanel,
-    frame: ui.frame,
     getEntries: () => timeline.entries,
-    getCurrentTs: () => timeline.current.ts,
+    closeOthers: closePanels,
+    onToggle: syncPanelState,
+    toast,
+  });
+  animateCtl = setupAnimate({
+    map, frame,
+    button: ui.btnAnimate,
+    panel: ui.animatePanel,
+    getEntries: () => timeline.entries,
+    closeOthers: closePanels,
+    onToggle: syncPanelState,
+    toast,
+  });
+  quizCtl = setupQuiz({
+    map, timeline,
+    button: ui.btnQuiz,
+    panel: ui.quizPanel,
     closeOthers: closePanels,
     onToggle: syncPanelState,
     toast,
@@ -427,13 +452,15 @@ function closePanels() {
   ui.btnLayers.setAttribute('aria-expanded', 'false');
   ui.btnInfo.setAttribute('aria-expanded', 'false');
   if (upscaleCtl?.isOpen()) upscaleCtl.close();
+  if (animateCtl?.isOpen()) animateCtl.close();
+  if (quizCtl?.isOpen()) quizCtl.close();
   syncPanelState();
 }
 
 // Auf kleinen Bildschirmen verdecken offene Panels die Seitenknöpfe; diese
 // werden dann ausgeblendet (Schliessen über das × im Panel).
 function syncPanelState() {
-  const anyOpen = !ui.layersPanel.hidden || !ui.infoPanel.hidden || !ui.upscalePanel.hidden;
+  const anyOpen = [ui.layersPanel, ui.infoPanel, ui.upscalePanel, ui.animatePanel, ui.quizPanel].some((p) => !p.hidden);
   document.body.classList.toggle('has-panel', anyOpen);
 }
 

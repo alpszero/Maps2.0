@@ -50,6 +50,24 @@ Veröffentlichen: Der Workflow `.github/workflows/pages.yml` stellt den Inhalt d
 Repositories bei jedem Push auf `main` über GitHub Pages bereit (in den
 Repository-Einstellungen unter *Pages* die Quelle *GitHub Actions* wählen).
 
+### Animation
+
+Ausschnitt mit demselben Rahmen wählen, Jahrgänge von/bis, Grösse (360 bis
+1080 px), Standzeit und Überblendung. Die App lädt jeden Jahrgang für den
+Ausschnitt (`js/animate.js`), überspringt Jahrgänge ohne Bild, blendet mit
+Ease-in-out über und schreibt die Jahreszahl ins Bild. Ausgabe als GIF (gifenc,
+256 Farben je Bild) oder als Video über MediaRecorder: MP4 in Safari, WebM in
+Chrome und Firefox. Die Videoaufnahme läuft in Echtzeit, der Tab muss dabei offen
+bleiben.
+
+### Quiz «Wo ist das?»
+
+Modus Gemeinden: Zufallspunkt in der Schweiz, Identify auf
+`ch.swisstopo.swissboundaries3d-gemeinde-flaeche.fill` liefert Name und Umriss;
+die Karte zoomt auf den Umriss (maximal Stufe 15). Drei weitere Gemeinden dienen
+als Ablenker, eine davon aus der Nähe. Modus Seen: eingebaute Liste der grössten
+Schweizer Seen. Während des Quiz ist die Suchleiste ausgeblendet.
+
 ## Aufbau
 
 ```
@@ -60,26 +78,37 @@ js/timeline.js        Jahrgänge: Überblendung ohne Flackern, Vorladen der Nach
 js/overlays.js        Zusatzebenen aus dem Geoportal-Verzeichnis
 js/search.js          Ortssuche mit Vorschlägen
 js/upscale.js         Hochskalieren: Kacheln laden, KI- und Filter-Methoden, Export
-js/upscale-ui.js      Hochskalieren: Rahmen, Panel, Vergleich
+js/upscale-ui.js      Hochskalieren: Panel, Vergleich, Export
+js/frame.js           Geografisch verankerter, ziehbarer Rahmen
+js/animate.js         Animation: Jahrgänge laden, überblenden, GIF/Video
+js/animate-ui.js      Animation: Panel
+js/quiz.js            Quiz: Runden aus Geoportal (Gemeinden) und Seenliste
+js/quiz-ui.js         Quiz: Panel
 js/geoadmin.js        Zugriff auf die geo.admin.ch-Dienste
 js/config.js          Dienste, Themen-Filter, Verhalten
 vendor/maplibre-gl/   MapLibre GL JS (BSD-3-Lizenz)
 vendor/tfjs/          TensorFlow.js (Apache-2.0), wird erst beim Hochskalieren geladen
 vendor/esrgan/        ESRGAN-Modelle aus UpscalerJS (MIT), 2× und 4×, schlank und mittel
 vendor/pica/          pica, Lanczos-Skalierung (MIT)
+vendor/gifenc/        gifenc, GIF-Encoder (MIT)
+vendor/realesrgan/    Real-ESRGAN-Gewichte (BSD-3), kompakt und x4plus
 ```
 
 ### Hochskalieren
 
-* **Ausschnitt**: Ein Rahmen in wählbarer Bodengrösse (Haus 40 m, Nachbarschaft
-  100 m, Quartier 160 m, Gross 200 m) und wählbarem Format (Quadrat, 3:2, A4 quer
-  und hoch) liegt über der Karte; Verschieben der Karte setzt den Ausschnitt, der
-  Rahmen folgt dem Zoom. Die Kacheln werden immer auf der höchsten Stufe der
-  SWISSIMAGE in EPSG:3857 (Stufe 20, rund 10 cm) geladen und zusammengesetzt, ein
-  Quartier also mit 1600 Pixeln Kante. Angezeigt werden Pixelgrösse, Bodenauflösung,
-  Metermasse und die Druckgrösse bei 300 dpi. Das Ergebnis ist auf 4096 Pixel Kante
-  begrenzt (Leinwandgrenze auf dem Handy); 4× steht daher nur bei kleinen
-  Ausschnitten zur Wahl, 2× ist die Vorgabe.
+* **Ausschnitt**: Ein Rahmen liegt über der Karte und ist geografisch verankert
+  (`js/frame.js`). Eckgriffe ändern die Grösse, Ziehen in der Fläche verschiebt ihn,
+  die Karte lässt sich daneben weiter bewegen; «Zurücksetzen» legt ein Quadrat von
+  höchstens 160 m in die Mitte. Die Kacheln werden immer auf der höchsten Stufe der
+  SWISSIMAGE in EPSG:3857 (Stufe 20, rund 10 cm) geladen und zusammengesetzt.
+  Angezeigt werden Pixelgrösse, Bodenauflösung, Metermasse und die Druckgrösse bei
+  300 dpi. Das Ergebnis ist auf 4096 Pixel Kante begrenzt (Leinwandgrenze auf dem
+  Handy); Faktoren, die das sprengen, sind deaktiviert. 2× ist die Vorgabe.
+* **Faktor 1×** setzt nur zusammen (volle Auflösung, ohne Netz), wahlweise mit
+  Veredelung.
+* **Tempo**: Rechen-Backend WebGPU, wo verfügbar (Chrome, Safari 26, Android),
+  sonst WebGL; grössere Rechenkacheln auf Desktop-Geräten; der Bildschirm wird
+  während der Berechnung wach gehalten (Wake Lock).
 * **Foto-Veredelung** (Vorgabe ein): streckt die Tonwerte (0.5 bis 99.5 Prozent der
   Helligkeit, aus dem ganzen Bild bestimmt, damit alle Kacheln gleich behandelt
   werden), kräftigt die Farben um rund ein Fünftel, legt ein mildes Kontrast-S an

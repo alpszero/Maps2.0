@@ -175,6 +175,18 @@ export function zoomForOrigin(origin) {
 }
 
 // ---------------------------------------------------------------------------
+// Allgemeines Identify auf eine Ebene (Punkt in WGS84)
+
+export async function identifyLayer(lng, lat, layer, { returnGeometry = false, signal } = {}) {
+  const url = `${API_BASE}/all/MapServer/identify`
+    + `?geometryType=esriGeometryPoint&geometry=${lng.toFixed(6)},${lat.toFixed(6)}`
+    + `&sr=4326&tolerance=0&returnGeometry=${returnGeometry}&geometryFormat=geojson&lang=de`
+    + `&layers=all:${layer}`;
+  const data = await fetchJson(url, { signal });
+  return data?.results || [];
+}
+
+// ---------------------------------------------------------------------------
 // Aufnahmejahr (Metadaten der SWISSIMAGE Zeitreise)
 
 const YEAR_RE = /(19\d{2}|20\d{2})/;
