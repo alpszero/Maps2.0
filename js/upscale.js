@@ -38,54 +38,28 @@ export const METHODS = [
     note: 'Ohne Glättung. Zeigt, was die Kachel wirklich enthält.' },
 ];
 
-export const FACTORS = [2, 4];
-
-/** Bodengrösse des Ausschnitts (längste Kante in Metern). */
-export const PRESETS = [
-  { key: 'haus', label: 'Haus · 40 m', meters: 40 },
-  { key: 'nachbarschaft', label: 'Nachbarschaft · 100 m', meters: 100 },
-  { key: 'quartier', label: 'Quartier · 160 m', meters: 160 },
-  { key: 'gross', label: 'Gross · 200 m', meters: 200 },
-];
-
-/** Seitenverhältnis Breite : Höhe. */
-export const FORMATS = [
-  { key: 'square', label: 'Quadrat', ratio: 1 },
-  { key: 'l32', label: 'Quer 3:2', ratio: 1.5 },
-  { key: 'a4l', label: 'A4 quer', ratio: Math.SQRT2 },
-  { key: 'p23', label: 'Hoch 2:3', ratio: 2 / 3 },
-  { key: 'a4p', label: 'A4 hoch', ratio: Math.SQRT1_2 },
-];
+export const FACTORS = [1, 2, 4];
 
 // ---------------------------------------------------------------------------
 // Ausschnitt
 
+/** Grösse des Ausschnitts in Weltpixeln auf einer Kachelstufe. */
+export function worldSize(bounds, zoom) {
+  const [x0, y0] = lngLatToWorldPx(bounds.west, bounds.north, zoom);
+  const [x1, y1] = lngLatToWorldPx(bounds.east, bounds.south, zoom);
+  return [Math.abs(x1 - x0), Math.abs(y1 - y0)];
+}
+
 /**
- * Beschreibt den Ausschnitt um die Kartenmitte: Bodengrösse, Quellpixel auf der
- * nativen Stufe, Grösse auf dem Bildschirm und geografische Grenzen.
+ * Beschreibt einen Ausschnitt (geografische Grenzen): Quellpixel auf der
+ * nativen Stufe, Bodenmasse und Bodenauflösung.
  */
-export function describeFrame(map, { meters, ratio }) {
-  const center = map.getCenter();
-  const latR = (center.lat * Math.PI) / 180;
-  const widthM = ratio >= 1 ? meters : meters * ratio;
-  const heightM = ratio >= 1 ? meters / ratio : meters;
-  const metersPerPx = (EARTH * Math.cos(latR)) / (TILE * 2 ** NATIVE_TILE_ZOOM);
-  const srcW = Math.round(widthM / metersPerPx);
-  const srcH = Math.round(heightM / metersPerPx);
-  // MapLibre rechnet mit einer 512er-Welt: Meter je CSS-Pixel bei aktuellem Zoom.
-  const metersPerCss = (EARTH * Math.cos(latR)) / (512 * 2 ** map.getZoom());
-  const screenW = widthM / metersPerCss;
-  const screenH = heightM / metersPerCss;
-  const c = map.project(center);
-  const tl = map.unproject([c.x - screenW / 2, c.y - screenH / 2]);
-  const br = map.unproject([c.x + screenW / 2, c.y + screenH / 2]);
-  const el = map.getContainer();
-  return {
-    widthM, heightM, srcW, srcH, metersPerPx, screenW, screenH,
-    fetchZoom: NATIVE_TILE_ZOOM,
-    fitsScreen: screenW <= el.clientWidth - 16 && screenH <= el.clientHeight * 0.6,
-    bounds: { west: tl.lng, north: tl.lat, east: br.lng, south: br.lat },
-  };
+export function describeBounds(bounds) {
+  const lat = (bounds.north + bounds.south) / 2;
+  const metersPerPx = (EARTH * Math.cos((lat * Math.PI) / 180)) / (TILE * 2 ** NATIVE_TILE_ZOOM);
+  const [w, h] = worldSize(bounds, NATIVE_TILE_ZOOM);
+  const srcW = Math.max(1, Math.round(w)), srcH = Math.max(1, Math.round(h));
+  return { srcW, srcH, metersPerPx, widthM: srcW * metersPerPx, heightM: srcH * metersPerPx, fetchZoom: NATIVE_TILE_ZOOM };
 }
 
 function lngLatToWorldPx(lng, lat, zoom) {
@@ -170,6 +144,10 @@ function loadScript(src) {
 
 let backendReady = null;
 
+/**
+ * Rechen-Backend wählen: WebGPU (schnellste Variante, moderne Browser), sonst
+ * WebGL, sonst Prozessor. Die Wahl passiert einmal je Sitzung.
+ */
 async function ensureBackend(onStatus) {
   if (!window.tf) {
     onStatus?.('KI-Bibliothek wird geladen …');
@@ -178,6 +156,12 @@ async function ensureBackend(onStatus) {
   const tf = window.tf;
   if (!backendReady) {
     backendReady = (async () => {
+      if (navigator.gpu) {
+        try {
+          await loadScript('vendor/tfjs/tf-backend-webgpu.min.js');
+          if (await tf.setBackend('webgpu')) { await tf.ready(); return tf.getBackend(); }
+        } catch (err) { console.warn('WebGPU nicht nutzbar, weiche auf WebGL aus.', err); }
+      }
       try {
         await tf.setBackend('webgl');
         await tf.ready();
@@ -192,6 +176,22 @@ async function ensureBackend(onStatus) {
   return backendReady;
 }
 
+export function backendLabel() {
+  const b = window.tf?.getBackend?.();
+  return b === 'webgpu' ? 'WebGPU' : b === 'webgl' ? 'WebGL' : b === 'cpu' ? 'Prozessor' : '';
+}
+
+/** Grössere Rechenkacheln auf Geräten mit viel Grafikspeicher (weniger Aufrufe, schneller). */
+function patchSize(base) {
+  const mobile = (navigator.maxTouchPoints || 0) > 1 && Math.min(screen.width, screen.height) < 900;
+  return mobile ? base : base * 2;
+}
+
+/** Bildschirm während langer Berechnungen wach halten (wo der Browser es erlaubt). */
+export async function keepAwake() {
+  try { return await navigator.wakeLock?.request('screen'); } catch { return null; }
+}
+
 // ---------------------------------------------------------------------------
 // Vergrössern
 
@@ -199,6 +199,7 @@ async function ensureBackend(onStatus) {
 export async function upscale(source, method, factor, { onProgress, onStatus, signal, denoise = 0.5 } = {}) {
   const m = METHODS.find((x) => x.key === method);
   if (!m) throw new Error(`Unbekannte Methode ${method}`);
+  if (factor === 1) { onProgress?.(1); return canvasScale(source, 1, true); } // nur zusammensetzen
   if (m.kind === 'x4plus') return x4plusUpscale(source, factor, { onProgress, onStatus, signal });
   if (m.kind === 'realesrgan') return realesrganUpscale(source, factor, denoise, { onProgress, onStatus, signal });
   if (m.kind === 'ai') return aiUpscale(source, m.model, factor, { onProgress, onStatus, signal });
@@ -309,9 +310,9 @@ async function aiUpscale(source, model, factor, { onProgress, onStatus, signal }
   await ensureBackend(onStatus);
   const tf = window.tf;
   const net = await loadModel(model, factor, onStatus);
-  onStatus?.('Berechne …');
+  onStatus?.(`Berechne mit ${backendLabel()} …`);
   return runTiled(tf, source, {
-    patch: 64, pad: 8, netScale: factor, factor,
+    patch: patchSize(64), pad: 8, netScale: factor, factor,
     forward: (x) => net.predict(x.mul(255)).div(255), // Ein- und Ausgabe des Modells 0–255
     onProgress, onStatus, signal,
   });
@@ -383,9 +384,9 @@ async function realesrganUpscale(source, factor, denoise, { onProgress, onStatus
   await ensureBackend(onStatus);
   const tf = window.tf;
   const net = await getRealesrgan(tf, denoise, onStatus);
-  onStatus?.('Berechne …');
+  onStatus?.(`Berechne mit ${backendLabel()} …`);
   return runTiled(tf, source, {
-    patch: 96, pad: 12, netScale: net.scale, factor,
+    patch: patchSize(96), pad: 12, netScale: net.scale, factor,
     forward: (x) => realesrganForward(tf, net, x),
     onProgress, onStatus, signal,
   });
@@ -507,9 +508,9 @@ async function x4plusUpscale(source, factor, { onProgress, onStatus, signal }) {
   await ensureBackend(onStatus);
   const tf = window.tf;
   const model = await getX4(tf, onStatus);
-  onStatus?.('Berechne … (grosses Modell, bitte Geduld)');
+  onStatus?.(`Berechne mit ${backendLabel()} … (grosses Modell, bitte Geduld)`);
   return runTiled(tf, source, {
-    patch: 64, pad: 10, netScale: model.scale, factor,
+    patch: patchSize(64), pad: 10, netScale: model.scale, factor,
     forward: (x) => x4Forward(tf, model, x),
     onProgress, onStatus, signal,
   });
@@ -529,7 +530,7 @@ const POLISH_PAD = 8;
 export async function polishCanvas(canvas, { onProgress, onStatus, signal, strength = 1 } = {}) {
   await ensureBackend(onStatus);
   const tf = window.tf;
-  onStatus?.('Veredle …');
+  onStatus?.(`Veredle mit ${backendLabel()} …`);
   const { lo, hi } = tonalRange(canvas);
   const W = canvas.width, H = canvas.height;
   const src = canvas.getContext('2d', { willReadFrequently: true });

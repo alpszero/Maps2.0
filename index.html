@@ -42,6 +42,12 @@
     <button id="btn-upscale" class="fab" type="button" aria-label="Hochskalieren mit KI" title="Hochskalieren mit KI" aria-expanded="false" aria-controls="upscale-panel">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 15v5h-5M4 4l6 6M20 20l-6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 3.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z" fill="currentColor"/></svg>
     </button>
+    <button id="btn-animate" class="fab" type="button" aria-label="Animation durch die Jahrgänge" title="Animation (GIF oder Video)" aria-expanded="false" aria-controls="animate-panel">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 5v14M17 5v14M3 9h4M3 15h4M17 9h4M17 15h4" stroke="currentColor" stroke-width="2"/><path d="M11 10v4l3-2z" fill="currentColor"/></svg>
+    </button>
+    <button id="btn-quiz" class="fab" type="button" aria-label="Quiz: Wo ist das?" title="Quiz: Wo ist das?" aria-expanded="false" aria-controls="quiz-panel">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1.9-1.1 1.8v.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.2" fill="currentColor"/></svg>
+    </button>
     <button id="btn-info" class="fab" type="button" aria-label="Über die Daten" title="Über die Daten" aria-expanded="false" aria-controls="info-panel">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 10.5v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="7.5" r="1.25" fill="currentColor"/></svg>
     </button>
@@ -106,6 +112,10 @@
       <h3>Hochskalieren</h3>
       <p>Über den Vergrössern-Knopf lässt sich ein Ausschnitt in wählbarer Grösse (Haus bis Quartier) in voller Auflösung laden und im Browser 2- oder 4-fach hochrechnen: mit Real-ESRGAN (gross oder kompakt), ESRGAN oder klassischen Filtern. Die Foto-Veredelung streckt Tonwerte, kräftigt Farben und schärft sanft nach. Alles rechnet das eigene Gerät, es wird kein Bild hochgeladen. Die KI-Modelle sind auf allgemeine Fotografien trainiert; sie schärfen Kanten und Texturen, können aber Details erfinden, die so nicht existieren.</p>
       <p>Die Lupen-Knöpfe links unten zoomen die Karte; «1:1» stellt die Luftbilder ohne digitale Vergrösserung dar, ein Kachelpixel je Bildschirmpixel.</p>
+      <h3>Animation</h3>
+      <p>Ausschnitt aufziehen, Jahrgänge wählen: Die App lädt jeden Jahrgang für diesen Ausschnitt und blendet weich von Jahr zu Jahr über, mit Jahreszahl im Bild. Ausgabe als GIF oder als Video (MP4 in Safari, WebM in Chrome und Firefox).</p>
+      <h3>Quiz</h3>
+      <p>«Wo ist das?» zeigt einen zufälligen Ausschnitt in Gemeindegrösse und vier Namen. Die Gemeinden kommen aus dem Geoportal (swissBOUNDARIES3D), die Seen aus einer Liste der grössten Schweizer Seen.</p>
       <h3>Bedienung</h3>
       <ul>
         <li>Regler ziehen oder ◀ ▶ tippen; Pfeiltasten und Leertaste funktionieren auch.</li>
@@ -116,7 +126,90 @@
     </div>
   </section>
 
-  <div id="frame" class="frame" hidden aria-hidden="true"><div class="frame-box"></div></div>
+  <div id="frame" class="frame" hidden aria-hidden="true">
+    <div class="frame-box" data-handle="move">
+      <div class="frame-handle" data-handle="nw"></div>
+      <div class="frame-handle" data-handle="ne"></div>
+      <div class="frame-handle" data-handle="sw"></div>
+      <div class="frame-handle" data-handle="se"></div>
+    </div>
+  </div>
+
+  <section id="animate-panel" class="panel" hidden aria-label="Animation">
+    <div class="panel-head">
+      <h2>Animation</h2>
+      <button class="panel-close" type="button" aria-label="Schliessen">×</button>
+    </div>
+    <div id="an-step1" class="up-step">
+      <div id="an-info" class="up-info">–</div>
+      <div class="up-row">
+        <button id="an-next" class="btn-primary" type="button">Ausschnitt übernehmen</button>
+        <button id="an-reset" class="btn-secondary" type="button">Rahmen zurücksetzen</button>
+      </div>
+    </div>
+    <div id="an-step2" class="up-step up-body" hidden>
+      <button id="an-back" class="btn-link" type="button">Anderen Ausschnitt wählen</button>
+      <div class="up-grid">
+        <label class="up-field"><span class="up-label">Von</span><select id="an-from"></select></label>
+        <label class="up-field"><span class="up-label">Bis</span><select id="an-to"></select></label>
+      </div>
+      <label class="up-field">
+        <span class="up-label">Grösse (längste Kante)</span>
+        <select id="an-size">
+          <option value="360">360 px (klein, für GIF)</option>
+          <option value="480">480 px</option>
+          <option value="720" selected>720 px</option>
+          <option value="1080">1080 px (Video)</option>
+        </select>
+      </label>
+      <div class="up-denoise">
+        <div class="up-row up-result-head"><span class="up-label">Standzeit je Jahrgang</span><span id="an-hold-label" class="up-meta"></span></div>
+        <input id="an-hold" type="range" min="0.3" max="3" step="0.1" value="1.0" aria-label="Standzeit je Jahrgang">
+      </div>
+      <div class="up-denoise">
+        <div class="up-row up-result-head"><span class="up-label">Überblendung</span><span id="an-fade-label" class="up-meta"></span></div>
+        <input id="an-fade" type="range" min="0" max="2" step="0.1" value="0.8" aria-label="Dauer der Überblendung">
+      </div>
+      <div class="up-label">Ausgabe</div>
+      <div class="up-row">
+        <label class="up-check"><input id="an-format-gif" type="radio" name="an-format" checked><span>GIF</span></label>
+        <label class="up-check"><input id="an-format-video" type="radio" name="an-format"><span>Video</span></label>
+        <span id="an-video-note" class="up-hint"></span>
+      </div>
+      <div class="up-row">
+        <button id="an-run" class="btn-primary" type="button">Animation erzeugen</button>
+        <button id="an-cancel" class="btn-secondary" type="button" hidden>Abbrechen</button>
+      </div>
+      <div id="an-progress" class="up-progress" hidden><div id="an-progress-bar" class="up-progress-bar"></div></div>
+      <div id="an-status" class="up-status" aria-live="polite"></div>
+      <div id="an-result" class="up-result" hidden>
+        <div id="an-preview" class="an-preview"></div>
+        <div id="an-meta" class="up-meta"></div>
+        <div class="up-row"><button id="an-download" class="btn-primary" type="button">Herunterladen</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="quiz-panel" class="panel is-compact" hidden aria-label="Quiz">
+    <div class="panel-head">
+      <h2>Wo ist das?</h2>
+      <button class="panel-close" type="button" aria-label="Schliessen">×</button>
+    </div>
+    <div class="up-step">
+      <div class="up-row">
+        <label class="up-field"><span class="up-label">Modus</span><select id="qz-mode"></select></label>
+        <button id="qz-start" class="btn-primary" type="button">Neue Runde</button>
+      </div>
+      <div id="qz-mode-note" class="up-hint"></div>
+      <div id="qz-status" class="up-info" aria-live="polite"></div>
+      <div id="qz-answers" class="qz-answers"></div>
+      <div id="qz-feedback" class="qz-feedback" aria-live="polite"></div>
+      <div class="up-row up-result-head">
+        <span id="qz-score" class="up-meta"></span>
+        <button id="qz-next" class="btn-secondary" type="button" hidden>Nächste Runde</button>
+      </div>
+    </div>
+  </section>
 
   <section id="upscale-panel" class="panel" hidden aria-label="Hochskalieren">
     <div class="panel-head">
@@ -125,16 +218,6 @@
     </div>
 
     <div id="up-step1" class="up-step">
-      <div class="up-grid">
-        <label class="up-field">
-          <span class="up-label">Ausschnitt</span>
-          <select id="up-preset"></select>
-        </label>
-        <label class="up-field">
-          <span class="up-label">Format</span>
-          <select id="up-format"></select>
-        </label>
-      </div>
       <label class="up-field">
         <span class="up-label">Bildstand</span>
         <select id="up-year"></select>
@@ -142,7 +225,10 @@
       <div id="up-info" class="up-info">–</div>
       <div id="up-hint" class="up-hint"></div>
       <progress id="up-capture-progress" class="up-capture-progress" max="1" value="0" hidden></progress>
-      <button id="up-capture" class="btn-primary" type="button">Ausschnitt übernehmen</button>
+      <div class="up-row">
+        <button id="up-capture" class="btn-primary" type="button">Ausschnitt übernehmen</button>
+        <button id="up-reset" class="btn-secondary" type="button">Rahmen zurücksetzen</button>
+      </div>
     </div>
 
     <div id="up-step2" class="up-step up-body" hidden>

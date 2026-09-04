@@ -1,3 +1,6 @@
 TensorFlow.js 4.22.0 (tf.min.js)
 Copyright Google LLC. Licensed under the Apache License, Version 2.0.
 https://github.com/tensorflow/tfjs — https://www.apache.org/licenses/LICENSE-2.0
+
+TensorFlow.js WebGPU backend 4.22.0 (tf-backend-webgpu.min.js)
+Copyright Google LLC. Licensed under the Apache License, Version 2.0.

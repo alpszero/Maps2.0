@@ -1,8 +1,8 @@
 // Oberfläche der Hochskalier-Funktion (Rahmen, Panel, Vergleich, Export).
 
 import {
-  METHODS, FACTORS, PRESETS, FORMATS, MAX_OUTPUT_EDGE,
-  describeFrame, captureSource, upscale, polishCanvas, canvasToBlob, formatMeters, printSize,
+  METHODS, FACTORS, MAX_OUTPUT_EDGE,
+  describeBounds, captureSource, upscale, polishCanvas, canvasToBlob, formatMeters, printSize, keepAwake,
 } from './upscale.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -13,10 +13,9 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
     step1: $('#up-step1', panel),
     step2: $('#up-step2', panel),
     year: $('#up-year', panel),
-    preset: $('#up-preset', panel),
-    format: $('#up-format', panel),
     info: $('#up-info', panel),
     hint: $('#up-hint', panel),
+    reset: $('#up-reset', panel),
     capture: $('#up-capture', panel),
     captureProgress: $('#up-capture-progress', panel),
     thumb: $('#up-thumb', panel),
@@ -45,12 +44,9 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
     open: $('#up-open', panel),
     fit: $('#up-fit', panel),
   };
-  const frameBox = $('.frame-box', frame) || frame;
 
   const state = {
     open: false,
-    preset: PRESETS.find((p) => p.key === 'quartier') || PRESETS[0],
-    format: FORMATS[0],
     source: null,      // {canvas, zoom, timestamp, metersPerPx, failed, total}
     result: null,      // {canvas, method, factor, denoise, polished, ms}
     method: METHODS[0].key,
@@ -61,27 +57,6 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
   };
 
   // --- Auswahllisten ---------------------------------------------------------
-  for (const p of PRESETS) {
-    const o = document.createElement('option');
-    o.value = p.key; o.textContent = p.label;
-    ui.preset.appendChild(o);
-  }
-  ui.preset.value = state.preset.key;
-  ui.preset.addEventListener('change', () => {
-    state.preset = PRESETS.find((p) => p.key === ui.preset.value) || state.preset;
-    updateInfo();
-  });
-  for (const f of FORMATS) {
-    const o = document.createElement('option');
-    o.value = f.key; o.textContent = f.label;
-    ui.format.appendChild(o);
-  }
-  ui.format.value = state.format.key;
-  ui.format.addEventListener('change', () => {
-    state.format = FORMATS.find((f) => f.key === ui.format.value) || state.format;
-    updateInfo();
-  });
-
   for (const m of METHODS) {
     const label = document.createElement('label');
     label.className = 'up-method';
@@ -100,7 +75,8 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
     b.className = 'seg';
     b.dataset.factor = String(f);
     b.textContent = `${f}×`;
-    b.addEventListener('click', () => setFactor(f));
+    b.title = f === 1 ? 'Nur zusammensetzen, volle Auflösung' : `${f}-fach hochrechnen`;
+    b.addEventListener('click', () => { setFactor(f); syncMethodOptions(); });
     ui.factors.appendChild(b);
   }
   setFactor(state.factor);
@@ -116,7 +92,9 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
 
   function syncMethodOptions() {
     const m = METHODS.find((x) => x.key === state.method);
-    ui.denoiseRow.hidden = m?.kind !== 'realesrgan';
+    ui.denoiseRow.hidden = state.factor === 1 || m?.kind !== 'realesrgan';
+    ui.methods.classList.toggle('is-muted', state.factor === 1);
+    ui.run.textContent = state.factor === 1 ? 'Zusammensetzen' : 'Hochskalieren';
   }
   ui.denoise.addEventListener('input', () => {
     state.denoise = Number(ui.denoise.value);
@@ -134,13 +112,12 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
     button.setAttribute('aria-expanded', 'true');
     fillYears();
     showStep(1);
-    updateInfo();
     onToggle?.();
   }
   function close() {
     state.open = false;
     panel.hidden = true;
-    frame.hidden = true;
+    frame.hide();
     document.body.classList.remove('is-framing');
     button.setAttribute('aria-expanded', 'false');
     state.controller?.abort();
@@ -169,35 +146,35 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
   function showStep(n) {
     ui.step1.hidden = n !== 1;
     ui.step2.hidden = n !== 2;
-    frame.hidden = n !== 1;
+    if (n === 1) frame.show(); else frame.hide();
     panel.classList.toggle('is-compact', n === 1);
     document.body.classList.toggle('is-framing', n === 1);
+    if (n === 1) updateInfo();
   }
 
   // --- Schritt 1: Ausschnitt -----------------------------------------------
-  function frameSpec() {
-    return { meters: state.preset.meters, ratio: state.format.ratio };
-  }
-
   function updateInfo() {
     if (!state.open || ui.step1.hidden) return;
-    const d = describeFrame(map, frameSpec());
-    frameBox.style.width = `${Math.round(d.screenW)}px`;
-    frameBox.style.height = `${Math.round(d.screenH)}px`;
-    const outW = d.srcW * state.factor, outH = d.srcH * state.factor;
+    const b = frame.getBounds();
+    if (!b) return;
+    const d = describeBounds(b);
+    const edge = Math.max(d.srcW, d.srcH);
     ui.info.textContent = `${d.srcW} × ${d.srcH} px · ≈ ${formatMeters(d.metersPerPx)}/px · ${formatMeters(d.widthM)} × ${formatMeters(d.heightM)}`;
-    const print = `Bei 2× ergibt das ${d.srcW * 2} × ${d.srcH * 2} px, gedruckt ≈ ${printSize(d.srcW * 2).toFixed(0)} × ${printSize(d.srcH * 2).toFixed(0)} cm mit 300 dpi.`;
-    ui.hint.textContent = d.fitsScreen
-      ? `Volle Auflösung der Kacheln. Karte verschieben, um den Ausschnitt zu setzen. ${print}`
-      : `Der Rahmen ist grösser als der Bildschirm; herauszoomen, um ihn ganz zu sehen. ${print}`;
-    void outW; void outH;
+    const tooBig = edge > MAX_OUTPUT_EDGE;
+    if (tooBig) {
+      ui.hint.textContent = `Ausschnitt zu gross (längste Kante ${edge} px, Grenze ${MAX_OUTPUT_EDGE} px, etwa ${formatMeters(MAX_OUTPUT_EDGE * d.metersPerPx)}). Rahmen an den Ecken verkleinern.`;
+    } else {
+      const print = `2× ergibt ${d.srcW * 2} × ${d.srcH * 2} px, gedruckt ≈ ${printSize(d.srcW * 2).toFixed(0)} × ${printSize(d.srcH * 2).toFixed(0)} cm mit 300 dpi.`;
+      ui.hint.textContent = `Rahmen an den Ecken ziehen oder in der Fläche verschieben; Karte daneben bewegen. Geladen wird immer die volle Auflösung. ${print}`;
+    }
+    ui.capture.disabled = tooBig;
   }
-  map.on('move', updateInfo);
-  map.on('zoom', updateInfo);
-  window.addEventListener('resize', updateInfo);
+  frame.onChange(updateInfo);
+  ui.reset.addEventListener('click', () => frame.reset(160));
 
   ui.capture.addEventListener('click', async () => {
-    const d = describeFrame(map, frameSpec());
+    const b = frame.getBounds();
+    const d = describeBounds(b);
     const timestamp = ui.year.value || 'current';
     state.controller?.abort();
     state.controller = new AbortController();
@@ -206,12 +183,12 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
     ui.captureProgress.value = 0;
     try {
       const res = await captureSource({
-        bounds: d.bounds, fetchZoom: d.fetchZoom, timestamp,
+        bounds: b, fetchZoom: d.fetchZoom, timestamp,
         signal: state.controller.signal,
         onProgress: (p) => { ui.captureProgress.value = p; },
       });
       if (res.failed === res.total) throw new Error('Für diesen Ausschnitt gibt es keine Kacheln.');
-      const lat = (d.bounds.north + d.bounds.south) / 2;
+      const lat = (b.north + b.south) / 2;
       const metersPerPx = (40075016.686 * Math.cos((lat * Math.PI) / 180)) / (256 * 2 ** res.zoom);
       state.source = { canvas: res.canvas, zoom: res.zoom, timestamp, metersPerPx, failed: res.failed, total: res.total };
       state.result = null;
@@ -240,19 +217,24 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
     syncFactorLimit();
   }
 
-  // 4× nur, wenn das Ergebnis die Leinwandgrenze einhält.
+  // Faktoren nur, wenn das Ergebnis die Leinwandgrenze einhält.
   function syncFactorLimit() {
     const s = state.source;
     if (!s) return;
     const edge = Math.max(s.canvas.width, s.canvas.height);
-    const four = ui.factors.querySelector('[data-factor="4"]');
-    const ok4 = edge * 4 <= MAX_OUTPUT_EDGE;
-    four.disabled = !ok4;
-    if (!ok4 && state.factor === 4) setFactor(2);
-    ui.factorHint.textContent = ok4 ? '' : `4× ist bei ${edge} px Quellbreite zu gross (Grenze ${MAX_OUTPUT_EDGE} px). Kleineren Ausschnitt wählen oder 2× verwenden.`;
+    let hint = '';
+    for (const b of ui.factors.children) {
+      const f = Number(b.dataset.factor);
+      const ok = edge * f <= MAX_OUTPUT_EDGE;
+      b.disabled = !ok;
+      if (!ok && state.factor === f) setFactor(edge * 2 <= MAX_OUTPUT_EDGE ? 2 : 1);
+      if (!ok && !hint) hint = `${f}× ist bei ${edge} px Quellbreite zu gross (Grenze ${MAX_OUTPUT_EDGE} px).`;
+    }
+    ui.factorHint.textContent = hint;
+    syncMethodOptions();
   }
 
-  ui.back.addEventListener('click', () => { state.controller?.abort(); showStep(1); updateInfo(); });
+  ui.back.addEventListener('click', () => { state.controller?.abort(); showStep(1); });
 
   // --- Schritt 2: Rechnen ---------------------------------------------------
   ui.run.addEventListener('click', async () => {
@@ -266,6 +248,7 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
     ui.progressBar.style.width = '0%';
     ui.result.hidden = true;
     ui.status.textContent = 'Vorbereitung …';
+    const lock = await keepAwake();
     const t0 = performance.now();
     try {
       let canvas = await upscale(state.source.canvas, state.method, state.factor, {
@@ -282,7 +265,7 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
         });
       }
       const ms = performance.now() - t0;
-      state.result = { canvas, method: method.key, factor: state.factor, denoise: state.denoise, polished: state.polish, ms };
+      state.result = { canvas, method: state.factor === 1 ? 'stitch' : method.key, factor: state.factor, denoise: state.denoise, polished: state.polish, ms };
       showResult();
     } catch (err) {
       if (err?.name === 'AbortError') ui.status.textContent = 'Abgebrochen.';
@@ -291,6 +274,7 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
         ui.status.textContent = `Fehlgeschlagen: ${err.message || err}`;
       }
     } finally {
+      lock?.release?.();
       ui.run.disabled = false;
       ui.cancel.hidden = true;
       ui.progress.hidden = !state.result;
@@ -320,9 +304,10 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
     applyDivider();
     applyFit();
     const secs = r.ms >= 1000 ? `${(r.ms / 1000).toFixed(1)} s` : `${Math.round(r.ms)} ms`;
-    const extra = (method.kind === 'realesrgan' ? ` · Glättung ${Math.round(r.denoise * 100)} %` : '') + (r.polished ? ' · veredelt' : '');
+    const name = r.method === 'stitch' ? 'Zusammengesetzt' : method.label;
+    const extra = (method?.kind === 'realesrgan' && r.factor > 1 ? ` · Glättung ${Math.round(r.denoise * 100)} %` : '') + (r.polished ? ' · veredelt' : '');
     const print = `≈ ${printSize(r.canvas.width).toFixed(0)} × ${printSize(r.canvas.height).toFixed(0)} cm bei 300 dpi`;
-    ui.resultMeta.textContent = `${method.label}${extra} · ${r.factor}× · ${r.canvas.width} × ${r.canvas.height} px · ≈ ${formatMeters(s.metersPerPx / r.factor)}/px · ${print} · ${secs}`;
+    ui.resultMeta.textContent = `${name}${extra} · ${r.factor}× · ${r.canvas.width} × ${r.canvas.height} px · ≈ ${formatMeters(s.metersPerPx / r.factor)}/px · ${print} · ${secs}`;
     ui.result.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
   }
 
