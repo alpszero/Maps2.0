@@ -27,6 +27,9 @@ export const DEFAULT_CENTER = [7.4474, 46.9481]; // Bern
 export const DEFAULT_ZOOM = 15.5;
 export const MIN_ZOOM = 7;
 export const MAX_ZOOM = 20;
+// Höchste Kachelstufe der SWISSIMAGE in EPSG:3857 (≈10 cm/px); 256er-Kacheln.
+// Ein Kachelpixel entspricht einem CSS-Pixel bei Kartenzoom NATIVE_TILE_ZOOM − 1.
+export const NATIVE_TILE_ZOOM = 20;
 
 // Wie viele Jahrgänge links/rechts vom aktuellen im Hintergrund geladen werden.
 export const PRELOAD_RADIUS = 3;

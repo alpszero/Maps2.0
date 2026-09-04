@@ -3,7 +3,7 @@
 import { Map as MapLibreMap } from '../vendor/maplibre-gl/maplibre-gl.mjs';
 import {
   DEFAULT_CENTER, DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, MAX_BOUNDS, SWISS_BOUNDS,
-  PLAY_INTERVAL_MS, THEMES, ATTRIBUTION,
+  PLAY_INTERVAL_MS, THEMES, ATTRIBUTION, NATIVE_TILE_ZOOM,
 } from './config.js';
 import { getSwissimageTimestamps, identifyFlightInfo } from './geoadmin.js';
 import { Timeline } from './timeline.js';
@@ -21,6 +21,9 @@ const ui = {
   sliderMax: $('#slider-max'),
   sliderCurrent: $('#slider-current'),
   btnUpscale: $('#btn-upscale'),
+  btnZoomIn: $('#btn-zoom-in'),
+  btnZoomOut: $('#btn-zoom-out'),
+  btnZoomNative: $('#btn-zoom-native'),
   upscalePanel: $('#upscale-panel'),
   frame: $('#frame'),
   btnPrev: $('#btn-prev'),
@@ -136,7 +139,26 @@ function setupSlider() {
   });
 }
 
+// Zoom, bei dem ein Kachelpixel genau einem Gerätepixel entspricht (keine
+// digitale Vergrösserung). Auf hochauflösenden Bildschirmen liegt er höher.
+function nativeZoom() {
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  return Math.min(MAX_ZOOM, NATIVE_TILE_ZOOM - 1 + Math.log2(dpr));
+}
+
+function setupZoomButtons() {
+  ui.btnZoomIn.addEventListener('click', () => map.zoomIn({ duration: 250 }));
+  ui.btnZoomOut.addEventListener('click', () => map.zoomOut({ duration: 250 }));
+  ui.btnZoomNative.addEventListener('click', () => map.easeTo({ zoom: nativeZoom(), duration: 400 }));
+  const sync = () => {
+    ui.btnZoomNative.classList.toggle('is-active', Math.abs(map.getZoom() - nativeZoom()) < 0.02);
+  };
+  map.on('zoom', sync);
+  sync();
+}
+
 function setupControls() {
+  setupZoomButtons();
   ui.btnPrev.addEventListener('click', () => { stopPlay(); timeline.prev(); });
   ui.btnNext.addEventListener('click', () => { stopPlay(); timeline.next(); });
   ui.btnPlay.addEventListener('click', () => (playTimer ? stopPlay() : startPlay()));
