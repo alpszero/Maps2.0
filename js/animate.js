@@ -36,12 +36,27 @@ export async function collectYears({ bounds, entries, size, onStatus, onProgress
     if (res.failed === res.total) { skipped.push(e.year); continue; }
     const c = document.createElement('canvas');
     c.width = width; c.height = height;
-    const ctx = c.getContext('2d');
+    const ctx = c.getContext('2d', { willReadFrequently: true });
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(res.canvas, 0, 0, width, height);
+    // Jahrgänge ohne echtes Bild (leer, weiss oder schwarz geliefert) auslassen
+    if (blankFraction(ctx, width, height) > 0.35) { skipped.push(e.year); continue; }
     frames.push({ year: e.year, canvas: c });
   }
   return { frames, width, height, skipped };
+}
+
+/** Anteil der Pixel, die fast weiss oder fast schwarz sind (Stichprobe). */
+export function blankFraction(ctx, width, height) {
+  const d = ctx.getImageData(0, 0, width, height).data;
+  const step = Math.max(1, Math.floor((width * height) / 20000));
+  let blank = 0, n = 0;
+  for (let i = 0; i < d.length; i += 4 * step) {
+    const r = d[i], g = d[i + 1], b = d[i + 2];
+    if ((r > 240 && g > 240 && b > 240) || (r < 10 && g < 10 && b < 10)) blank++;
+    n++;
+  }
+  return n ? blank / n : 1;
 }
 
 /** Zeichnet den Zustand zwischen Jahrgang i und i+1 (t = 0..1) auf ctx. */

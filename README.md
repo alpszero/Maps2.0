@@ -54,7 +54,8 @@ Repository-Einstellungen unter *Pages* die Quelle *GitHub Actions* wählen).
 
 Ausschnitt mit demselben Rahmen wählen, Jahrgänge von/bis, Grösse (360 bis
 1080 px), Standzeit und Überblendung. Die App lädt jeden Jahrgang für den
-Ausschnitt (`js/animate.js`), überspringt Jahrgänge ohne Bild, blendet mit
+Ausschnitt (`js/animate.js`), überspringt Jahrgänge ohne Bild (fehlende Kacheln
+oder überwiegend weisse bzw. schwarze Flächen), blendet mit
 Ease-in-out über und schreibt die Jahreszahl ins Bild. Ausgabe als GIF (gifenc,
 256 Farben je Bild) oder als Video über MediaRecorder: MP4 in Safari, WebM in
 Chrome und Firefox. Die Videoaufnahme läuft in Echtzeit, der Tab muss dabei offen
@@ -102,8 +103,10 @@ vendor/realesrgan/    Real-ESRGAN-Gewichte (BSD-3), kompakt und x4plus
   höchstens 160 m in die Mitte. Die Kacheln werden immer auf der höchsten Stufe der
   SWISSIMAGE in EPSG:3857 (Stufe 20, rund 10 cm) geladen und zusammengesetzt.
   Angezeigt werden Pixelgrösse, Bodenauflösung, Metermasse und die Druckgrösse bei
-  300 dpi. Das Ergebnis ist auf 4096 Pixel Kante begrenzt (Leinwandgrenze auf dem
-  Handy); Faktoren, die das sprengen, sind deaktiviert. 2× ist die Vorgabe.
+  300 dpi. Die grösste mögliche Kante wird je Gerät gemessen (Leinwandgrenze des
+  Browsers, 4096 bis 16384 px); Faktoren, die das sprengen, sind deaktiviert. 2× ist
+  die Vorgabe. «Direkt als JPEG» setzt den Ausschnitt in voller Auflösung zusammen
+  und speichert ihn sofort, ohne Netz und ohne Vorschau.
 * **Faktor 1×** setzt nur zusammen (volle Auflösung, ohne Netz), wahlweise mit
   Veredelung.
 * **Tempo**: Rechen-Backend WebGPU, wo verfügbar (Chrome, Safari 26, Android),
