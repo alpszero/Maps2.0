@@ -1,11 +1,12 @@
 // Oberfläche der Hochskalier-Funktion (Rahmen, Panel, Vergleich, Export).
 
 import {
-  METHODS, FACTORS, MAX_OUTPUT_EDGE,
+  METHODS, FACTORS, maxCanvasEdge,
   describeBounds, captureSource, upscale, polishCanvas, canvasToBlob, formatMeters, printSize, keepAwake,
 } from './upscale.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
+const PREVIEW_EDGE = 2048; // Vorschau-Leinwände klein halten, das Original bleibt für den Export
 
 export function setupUpscale({ map, button, panel, frame, getEntries, closeOthers, onToggle, toast }) {
   const ui = {
@@ -17,6 +18,7 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
     hint: $('#up-hint', panel),
     reset: $('#up-reset', panel),
     capture: $('#up-capture', panel),
+    direct: $('#up-direct', panel),
     captureProgress: $('#up-capture-progress', panel),
     thumb: $('#up-thumb', panel),
     srcMeta: $('#up-src-meta', panel),
@@ -47,6 +49,7 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
 
   const state = {
     open: false,
+    maxEdge: 4096,
     source: null,      // {canvas, zoom, timestamp, metersPerPx, failed, total}
     result: null,      // {canvas, method, factor, denoise, polished, ms}
     method: METHODS[0].key,
@@ -55,6 +58,7 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
     polish: true,
     controller: null,
   };
+  maxCanvasEdge().then((edge) => { state.maxEdge = edge; updateInfo(); });
 
   // --- Auswahllisten ---------------------------------------------------------
   for (const m of METHODS) {
@@ -160,25 +164,27 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
     const d = describeBounds(b);
     const edge = Math.max(d.srcW, d.srcH);
     ui.info.textContent = `${d.srcW} × ${d.srcH} px · ≈ ${formatMeters(d.metersPerPx)}/px · ${formatMeters(d.widthM)} × ${formatMeters(d.heightM)}`;
-    const tooBig = edge > MAX_OUTPUT_EDGE;
+    const tooBig = edge > state.maxEdge;
     if (tooBig) {
-      ui.hint.textContent = `Ausschnitt zu gross (längste Kante ${edge} px, Grenze ${MAX_OUTPUT_EDGE} px, etwa ${formatMeters(MAX_OUTPUT_EDGE * d.metersPerPx)}). Rahmen an den Ecken verkleinern.`;
+      ui.hint.textContent = `Ausschnitt zu gross für diesen Browser (längste Kante ${edge} px, hier möglich ${state.maxEdge} px, etwa ${formatMeters(state.maxEdge * d.metersPerPx)}). Rahmen an den Ecken verkleinern.`;
     } else {
-      const print = `2× ergibt ${d.srcW * 2} × ${d.srcH * 2} px, gedruckt ≈ ${printSize(d.srcW * 2).toFixed(0)} × ${printSize(d.srcH * 2).toFixed(0)} cm mit 300 dpi.`;
-      ui.hint.textContent = `Rahmen an den Ecken ziehen oder in der Fläche verschieben; Karte daneben bewegen. Geladen wird immer die volle Auflösung. ${print}`;
+      const mp = ((d.srcW * d.srcH) / 1e6).toFixed(1);
+      ui.hint.textContent = `Rahmen an den Ecken ziehen oder in der Fläche verschieben; Karte daneben bewegen. Geladen wird immer die volle Auflösung (${mp} Megapixel, gedruckt ≈ ${printSize(d.srcW).toFixed(0)} × ${printSize(d.srcH).toFixed(0)} cm mit 300 dpi).`;
     }
     ui.capture.disabled = tooBig;
+    ui.direct.disabled = tooBig;
   }
   frame.onChange(updateInfo);
   ui.reset.addEventListener('click', () => frame.reset(160));
 
-  ui.capture.addEventListener('click', async () => {
+  async function capture() {
     const b = frame.getBounds();
     const d = describeBounds(b);
     const timestamp = ui.year.value || 'current';
     state.controller?.abort();
     state.controller = new AbortController();
     ui.capture.disabled = true;
+    ui.direct.disabled = true;
     ui.captureProgress.hidden = false;
     ui.captureProgress.value = 0;
     try {
@@ -192,13 +198,33 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
       const metersPerPx = (40075016.686 * Math.cos((lat * Math.PI) / 180)) / (256 * 2 ** res.zoom);
       state.source = { canvas: res.canvas, zoom: res.zoom, timestamp, metersPerPx, failed: res.failed, total: res.total };
       state.result = null;
+      return state.source;
+    } finally {
+      ui.capture.disabled = false;
+      ui.direct.disabled = false;
+      ui.captureProgress.hidden = true;
+    }
+  }
+
+  ui.capture.addEventListener('click', async () => {
+    try {
+      await capture();
       showSource();
       showStep(2);
     } catch (err) {
       if (err?.name !== 'AbortError') toast(err.message || 'Ausschnitt konnte nicht geladen werden.');
-    } finally {
-      ui.capture.disabled = false;
-      ui.captureProgress.hidden = true;
+    }
+  });
+
+  // Direkt: volle Auflösung zusammensetzen und als JPEG laden, ohne Netz.
+  ui.direct.addEventListener('click', async () => {
+    try {
+      const s = await capture();
+      state.result = { canvas: s.canvas, method: 'stitch', factor: 1, denoise: 0, polished: false, ms: 0 };
+      await download('image/jpeg', 'jpg', 0.93);
+      toast(`JPEG mit ${s.canvas.width} × ${s.canvas.height} px gespeichert.`);
+    } catch (err) {
+      if (err?.name !== 'AbortError') toast(err.message || 'Ausschnitt konnte nicht geladen werden.');
     }
   });
 
@@ -217,7 +243,7 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
     syncFactorLimit();
   }
 
-  // Faktoren nur, wenn das Ergebnis die Leinwandgrenze einhält.
+  // Faktoren nur, wenn das Ergebnis die Leinwandgrenze des Browsers einhält.
   function syncFactorLimit() {
     const s = state.source;
     if (!s) return;
@@ -225,10 +251,10 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
     let hint = '';
     for (const b of ui.factors.children) {
       const f = Number(b.dataset.factor);
-      const ok = edge * f <= MAX_OUTPUT_EDGE;
+      const ok = edge * f <= state.maxEdge;
       b.disabled = !ok;
-      if (!ok && state.factor === f) setFactor(edge * 2 <= MAX_OUTPUT_EDGE ? 2 : 1);
-      if (!ok && !hint) hint = `${f}× ist bei ${edge} px Quellbreite zu gross (Grenze ${MAX_OUTPUT_EDGE} px).`;
+      if (!ok && state.factor === f) setFactor(edge * 2 <= state.maxEdge ? 2 : 1);
+      if (!ok && !hint) hint = `${f}× ergäbe ${edge * f} px Kante; dieser Browser schafft ${state.maxEdge} px.`;
     }
     ui.factorHint.textContent = hint;
     syncMethodOptions();
@@ -292,13 +318,17 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
     ui.progress.hidden = true;
     ui.result.hidden = false;
 
-    // Vorher: Quelle ohne Glättung auf Ergebnisgrösse gebracht.
-    ui.before.width = r.canvas.width; ui.before.height = r.canvas.height;
+    // Vorschau verkleinert, damit grosse Ergebnisse nicht dreifach im Speicher liegen.
+    const scale = Math.min(1, PREVIEW_EDGE / Math.max(r.canvas.width, r.canvas.height));
+    const pw = Math.max(1, Math.round(r.canvas.width * scale)), ph = Math.max(1, Math.round(r.canvas.height * scale));
+    ui.before.width = pw; ui.before.height = ph;
     const bctx = ui.before.getContext('2d');
-    bctx.imageSmoothingEnabled = false;
-    bctx.drawImage(s.canvas, 0, 0, r.canvas.width, r.canvas.height);
-    ui.after.width = r.canvas.width; ui.after.height = r.canvas.height;
-    ui.after.getContext('2d').drawImage(r.canvas, 0, 0);
+    bctx.imageSmoothingEnabled = scale < 1;
+    bctx.drawImage(s.canvas, 0, 0, pw, ph);
+    ui.after.width = pw; ui.after.height = ph;
+    const actx = ui.after.getContext('2d');
+    actx.imageSmoothingQuality = 'high';
+    actx.drawImage(r.canvas, 0, 0, pw, ph);
 
     ui.divider.value = '50';
     applyDivider();
@@ -307,7 +337,8 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
     const name = r.method === 'stitch' ? 'Zusammengesetzt' : method.label;
     const extra = (method?.kind === 'realesrgan' && r.factor > 1 ? ` · Glättung ${Math.round(r.denoise * 100)} %` : '') + (r.polished ? ' · veredelt' : '');
     const print = `≈ ${printSize(r.canvas.width).toFixed(0)} × ${printSize(r.canvas.height).toFixed(0)} cm bei 300 dpi`;
-    ui.resultMeta.textContent = `${name}${extra} · ${r.factor}× · ${r.canvas.width} × ${r.canvas.height} px · ≈ ${formatMeters(s.metersPerPx / r.factor)}/px · ${print} · ${secs}`;
+    const preview = scale < 1 ? ` · Vorschau verkleinert, Download in voller Grösse` : '';
+    ui.resultMeta.textContent = `${name}${extra} · ${r.factor}× · ${r.canvas.width} × ${r.canvas.height} px · ≈ ${formatMeters(s.metersPerPx / r.factor)}/px · ${print} · ${secs}${preview}`;
     ui.result.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
   }
 
@@ -332,20 +363,18 @@ export function setupUpscale({ map, button, panel, frame, getEntries, closeOther
 
   async function download(type, ext, quality) {
     if (!state.result) return;
-    try {
-      const blob = await canvasToBlob(state.result.canvas, type, quality);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName(ext);
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch (err) { toast(err.message); }
+    const blob = await canvasToBlob(state.result.canvas, type, quality);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName(ext);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
-  ui.download.addEventListener('click', () => download('image/png', 'png'));
-  ui.downloadJpeg.addEventListener('click', () => download('image/jpeg', 'jpg', 0.93));
+  ui.download.addEventListener('click', () => download('image/png', 'png').catch((e) => toast(e.message)));
+  ui.downloadJpeg.addEventListener('click', () => download('image/jpeg', 'jpg', 0.93).catch((e) => toast(e.message)));
 
   ui.open.addEventListener('click', async () => {
     if (!state.result) return;
