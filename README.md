@@ -71,11 +71,23 @@ vendor/pica/          pica, Lanczos-Skalierung (MIT)
 
 ### Hochskalieren
 
-* **Ausschnitt**: Ein quadratischer Rahmen liegt über der Karte; Verschieben und
-  Zoomen der Karte setzt den Ausschnitt. Angezeigt werden Pixelgrösse, Bodenauflösung
-  und Breite in Metern. Die Kacheln werden auf der höchsten Stufe der SWISSIMAGE in
-  EPSG:3857 (Stufe 20, rund 10 cm) geladen, maximal 1024 × 1024 Pixel; grössere
-  Ausschnitte werden auf einer tieferen Stufe geladen.
+* **Ausschnitt**: Ein Rahmen in wählbarer Bodengrösse (Haus 40 m, Nachbarschaft
+  100 m, Quartier 160 m, Gross 200 m) und wählbarem Format (Quadrat, 3:2, A4 quer
+  und hoch) liegt über der Karte; Verschieben der Karte setzt den Ausschnitt, der
+  Rahmen folgt dem Zoom. Die Kacheln werden immer auf der höchsten Stufe der
+  SWISSIMAGE in EPSG:3857 (Stufe 20, rund 10 cm) geladen und zusammengesetzt, ein
+  Quartier also mit 1600 Pixeln Kante. Angezeigt werden Pixelgrösse, Bodenauflösung,
+  Metermasse und die Druckgrösse bei 300 dpi. Das Ergebnis ist auf 4096 Pixel Kante
+  begrenzt (Leinwandgrenze auf dem Handy); 4× steht daher nur bei kleinen
+  Ausschnitten zur Wahl, 2× ist die Vorgabe.
+* **Foto-Veredelung** (Vorgabe ein): streckt die Tonwerte (0.5 bis 99.5 Prozent der
+  Helligkeit, aus dem ganzen Bild bestimmt, damit alle Kacheln gleich behandelt
+  werden), kräftigt die Farben um rund ein Fünftel, legt ein mildes Kontrast-S an
+  und schärft mit einer Unschärfemaske sanft nach. Läuft kachelweise auf der
+  Grafikeinheit.
+* **Zoom-Knöpfe** links unten: Vergrössern, Verkleinern und «1:1», der Zoom, bei
+  dem ein Kachelpixel einem Gerätepixel entspricht (Stufe 19 plus log2 der
+  Pixeldichte, gedeckelt bei 20).
 * **Bildstand**: «Aktuellster Stand» (Zeitstempel `current` des WMTS, also die
   neusten Aufnahmen) oder ein beliebiger Jahrgang.
 * **Methoden**: Real-ESRGAN x4plus (das grosse Modell «RealESRGAN_x4plus», RRDBNet
@@ -91,8 +103,8 @@ vendor/pica/          pica, Lanczos-Skalierung (MIT)
   rauschunterdrückenden Modells linear, entsprechend `denoise_strength` im
   Original. 0 % belässt Körnung, 100 % glättet am stärksten; Vorgabe 50 %.
   Das Netz rechnet fest 4-fach; 2× entsteht durch sauberes Verkleinern (Lanczos).
-* **Ergebnis**: Vorher/Nachher-Schieber, 1:1-Ansicht, PNG-Download, Öffnen im
-  neuen Tab. Es verlässt kein Bild das Gerät.
+* **Ergebnis**: Vorher/Nachher-Schieber, 1:1-Ansicht, Download als PNG oder JPEG
+  (Qualität 93 %), Öffnen im neuen Tab. Es verlässt kein Bild das Gerät.
 
 Zu den Modellen: Es gibt derzeit kein fertiges, im Browser lauffähiges
 Super-Resolution-Modell, das speziell auf Luftbilder trainiert wurde. Real-ESRGAN

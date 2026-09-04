@@ -298,6 +298,32 @@ input[type="range"]::-moz-range-thumb {
 .layer-opacity span { font-size: 12px; color: var(--muted); width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
 .layer-note { color: var(--muted); font-size: 13px; padding: 8px 10px; }
 
+/* ---------------------------------------------------------------- Zoom-Knöpfe */
+.zoomctl {
+  position: absolute;
+  left: calc(var(--safe-left) + 12px);
+  bottom: calc(var(--safe-bottom) + 118px);
+  z-index: 20;
+  display: flex; flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.zoombtn {
+  width: 44px; height: 42px;
+  border: 0; background: transparent;
+  display: grid; place-items: center;
+}
+.zoombtn + .zoombtn { border-top: 1px solid var(--line); }
+.zoombtn svg { width: 22px; height: 22px; }
+.zoombtn-text { font-weight: 700; font-size: 13px; letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
+.zoombtn.is-active { background: var(--accent); color: var(--accent-ink); }
+@media (max-width: 719px) { body.has-panel .zoomctl { display: none; } }
+
 /* ---------------------------------------------------------------- Hochskalieren */
 .frame {
   position: absolute; inset: 0 0 38vh 0; /* Platz für das kompakte Panel unten */
@@ -307,8 +333,8 @@ input[type="range"]::-moz-range-thumb {
 }
 body.is-framing .year { display: none; }
 .frame-box {
-  width: min(60vw, 36vh);
-  aspect-ratio: 1;
+  width: 200px; height: 200px; /* wird per Skript auf die Bodengrösse gesetzt */
+  max-width: none;
   border: 2px solid var(--accent);
   box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.38), 0 0 0 1px rgba(0, 0, 0, 0.6);
   border-radius: 4px;
@@ -324,7 +350,10 @@ body.is-framing .year { display: none; }
 .panel.is-compact { max-height: none; }
 .up-step { padding: 12px 18px 16px; display: flex; flex-direction: column; gap: 10px; }
 .up-body { overflow-y: auto; }
-.up-field { display: flex; flex-direction: column; gap: 4px; }
+.up-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.up-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.up-check { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; cursor: pointer; }
+.up-check input { width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--accent); flex: none; }
 .up-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
 .up-info { font-size: 15px; font-variant-numeric: tabular-nums; }
 .up-hint { font-size: 13px; color: var(--muted); }
@@ -364,6 +393,7 @@ select {
 .seg { border: 0; background: transparent; padding: 8px 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .seg + .seg { border-left: 1px solid var(--line); }
 .seg.is-active { background: var(--accent); color: var(--accent-ink); }
+.seg:disabled { opacity: 0.4; cursor: default; }
 
 .up-progress { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
 .up-progress-bar { height: 100%; width: 0; background: var(--accent); transition: width 0.15s linear; }
@@ -423,6 +453,6 @@ select {
   .side { bottom: auto; top: calc(var(--safe-top) + 70px); }
   .year { top: calc(var(--safe-top) + 76px); }
   .frame { inset: 0; }
-  .frame-box { width: min(40vw, 50vh); }
   body.is-framing .year { display: block; }
+  .zoomctl { bottom: auto; top: calc(var(--safe-top) + 70px); left: calc(var(--safe-left) + 12px); }
 }

@@ -47,6 +47,16 @@
     </button>
   </div>
 
+  <div class="zoomctl" role="group" aria-label="Zoom">
+    <button id="btn-zoom-in" class="zoombtn" type="button" aria-label="Vergrössern" title="Vergrössern">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15.5 15.5 21 21M8 10.5h5M10.5 8v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+    <button id="btn-zoom-out" class="zoombtn" type="button" aria-label="Verkleinern" title="Verkleinern">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15.5 15.5 21 21M8 10.5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+    <button id="btn-zoom-native" class="zoombtn zoombtn-text" type="button" aria-label="Originalgrösse, ein Kachelpixel je Bildschirmpixel" title="1:1 – keine digitale Vergrösserung">1:1</button>
+  </div>
+
   <footer class="bottombar">
     <div class="slider-card">
       <button id="btn-prev" class="step" type="button" aria-label="Früherer Jahrgang">
@@ -94,7 +104,8 @@
       <h3>Zusatzebenen</h3>
       <p>Über den Ebenen-Knopf lassen sich Fachdaten über das Luftbild legen, mit regelbarer Deckkraft: Wasser, Laser &amp; Gelände, Radar &amp; Wetter, Telekommunikation. Die Liste wird aus dem Verzeichnis des Geoportals gelesen; neue oder umbenannte Ebenen erscheinen von selbst.</p>
       <h3>Hochskalieren</h3>
-      <p>Über den Vergrössern-Knopf lässt sich ein Ausschnitt der Luftbilder im Browser 2- oder 4-fach hochrechnen: mit einem neuronalen Netz (ESRGAN, zwei Grössen) oder klassischen Filtern (Lanczos, bikubisch, Pixelwiederholung). Alles rechnet das eigene Gerät, es wird kein Bild hochgeladen. Die KI-Modelle sind auf allgemeine Fotografien trainiert; sie schärfen Kanten und Texturen, können aber Details erfinden, die so nicht existieren.</p>
+      <p>Über den Vergrössern-Knopf lässt sich ein Ausschnitt in wählbarer Grösse (Haus bis Quartier) in voller Auflösung laden und im Browser 2- oder 4-fach hochrechnen: mit Real-ESRGAN (gross oder kompakt), ESRGAN oder klassischen Filtern. Die Foto-Veredelung streckt Tonwerte, kräftigt Farben und schärft sanft nach. Alles rechnet das eigene Gerät, es wird kein Bild hochgeladen. Die KI-Modelle sind auf allgemeine Fotografien trainiert; sie schärfen Kanten und Texturen, können aber Details erfinden, die so nicht existieren.</p>
+      <p>Die Lupen-Knöpfe links unten zoomen die Karte; «1:1» stellt die Luftbilder ohne digitale Vergrösserung dar, ein Kachelpixel je Bildschirmpixel.</p>
       <h3>Bedienung</h3>
       <ul>
         <li>Regler ziehen oder ◀ ▶ tippen; Pfeiltasten und Leertaste funktionieren auch.</li>
@@ -114,6 +125,16 @@
     </div>
 
     <div id="up-step1" class="up-step">
+      <div class="up-grid">
+        <label class="up-field">
+          <span class="up-label">Ausschnitt</span>
+          <select id="up-preset"></select>
+        </label>
+        <label class="up-field">
+          <span class="up-label">Format</span>
+          <select id="up-format"></select>
+        </label>
+      </div>
       <label class="up-field">
         <span class="up-label">Bildstand</span>
         <select id="up-year"></select>
@@ -150,6 +171,12 @@
         <span class="up-label">Faktor</span>
         <div id="up-factors" class="segmented" role="group" aria-label="Vergrösserungsfaktor"></div>
       </div>
+      <div id="up-factor-hint" class="up-hint"></div>
+
+      <label class="up-check">
+        <input id="up-polish" type="checkbox" checked>
+        <span class="up-method-text"><span class="up-method-name">Foto-Veredelung</span><span class="up-method-note">Tonwerte strecken, Farben kräftigen, sanft nachschärfen. Für ein einheitliches, druckbares Bild.</span></span>
+      </label>
 
       <div class="up-row">
         <button id="up-run" class="btn-primary" type="button">Hochskalieren</button>
@@ -174,6 +201,7 @@
         <div id="up-result-meta" class="up-meta"></div>
         <div class="up-row">
           <button id="up-download" class="btn-primary" type="button">PNG herunterladen</button>
+          <button id="up-download-jpeg" class="btn-secondary" type="button">JPEG herunterladen</button>
           <button id="up-open" class="btn-secondary" type="button">Im Browser öffnen</button>
         </div>
       </div>
