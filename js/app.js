@@ -11,7 +11,7 @@ import { Overlays } from './layers.js';
 import { setupSearch } from './search.js';
 import { FrameSelector } from './frame.js';
 import { setupInsta } from './insta-ui.js';
-import { randomPlace } from './places.js';
+import { randomPlace, locatePlace } from './places.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -324,17 +324,29 @@ function updateLayersBadge() {
 // ---------------------------------------------------------------------------
 // Bekannte Orte von oben
 
+let placeController = null;
+
 function setupRandom() {
-  const go = () => {
+  const go = async () => {
     userActed = true;
     closePanels();
     stopPlay();
     const p = randomPlace(lastPlace);
     lastPlace = p;
-    map.flyTo({ center: [p.lng, p.lat], zoom: p.zoom, duration: 1800, curve: 1.6, essential: true });
     ui.placeName.textContent = p.name;
     ui.placeSub.textContent = p.sub;
     ui.placeCard.hidden = false;
+    // Lage über das Ortsverzeichnis nachschärfen, dann fliegen.
+    placeController?.abort();
+    placeController = new AbortController();
+    let target = { lng: p.lng, lat: p.lat };
+    try {
+      target = await locatePlace(p, { signal: placeController.signal });
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+    }
+    if (lastPlace !== p) return;
+    map.flyTo({ center: [target.lng, target.lat], zoom: p.zoom, duration: 1800, curve: 1.6, essential: true });
   };
   ui.btnRandom.addEventListener('click', go);
   ui.placeNext.addEventListener('click', go);

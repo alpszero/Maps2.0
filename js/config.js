@@ -65,14 +65,9 @@ export const OVERLAYS = [
 export const NAMES_LAYER = 'ch.swisstopo.swissnames3d';
 export const MUNICIPALITY_LAYER = 'ch.swisstopo.swissboundaries3d-gemeinde-flaeche.fill';
 
-// Insta-Bild: Kacheln eine Stufe feiner als die Kartenansicht laden, höchstens
-// aber so, dass die längste Kante des Quellbilds INSTA_MAX_SOURCE_EDGE nicht
-// übersteigt (zusätzlich gedeckelt durch die Leinwandgrenze des Browsers, siehe
-// maxCanvasEdge). Ist das Quellbild kleiner als INSTA_AI_BELOW, wird es mit dem
-// kompakten Real-ESRGAN 2-fach hochgerechnet; sonst zählen die echten Pixel.
+// Insta-Bild: Kacheln auf der höchsten verfügbaren Stufe laden, höchstens aber
+// so, dass die längste Kante INSTA_MAX_SOURCE_EDGE nicht übersteigt (zusätzlich
+// gedeckelt durch die Leinwandgrenze des Browsers, siehe maxCanvasEdge).
 export const INSTA_MAX_SOURCE_EDGE = 10000;
-export const INSTA_AI_BELOW = 1024;
-// Glättung des kompakten Real-ESRGAN (0 = keine, 1 = maximal).
-export const INSTA_DENOISE = 0.5;
 
 export const ATTRIBUTION = '© swisstopo';

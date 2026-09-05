@@ -1,28 +1,24 @@
-// Insta-Bild: Ausschnitt laden, mit Real-ESRGAN kompakt 2-fach schärfen,
-// veredeln und Ortsangaben (Name, Gemeinde, Koordinaten) weiss einmontieren.
+// Insta-Bild: Ausschnitt in voller Auflösung zusammensetzen, Foto-Filter für
+// Luftaufnahmen anwenden und Ortsangaben (Name, Gemeinde, Koordinaten) weiss
+// einmontieren.
 
-import { NAMES_LAYER, MUNICIPALITY_LAYER, INSTA_MAX_SOURCE_EDGE, INSTA_AI_BELOW, INSTA_DENOISE, NATIVE_TILE_ZOOM } from './config.js';
+import { NAMES_LAYER, MUNICIPALITY_LAYER, INSTA_MAX_SOURCE_EDGE } from './config.js';
 import { identifyEnvelope, identifyLayer } from './geoadmin.js';
-import { captureSource, pickFetchZoom, realesrganUpscale, polishCanvas, metersPerPixel, worldSize } from './enhance.js';
-
-/**
- * Plan für einen Ausschnitt bei gegebener Kartenansicht: Kachelstufe eine Stufe
- * feiner, als der Bildschirm zeigt (bei hochauflösenden Bildschirmen zählt deren
- * Pixeldichte mit), gedeckelt durch INSTA_MAX_SOURCE_EDGE; dazu, ob die KI das
- * Quellbild noch 2-fach hochrechnet, und die erwartete Ausgabegrösse.
- */
-export function planInsta(bounds, viewZoom, maxEdge = 4096) {
-  const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
-  const wanted = Math.floor(viewZoom + Math.log2(dpr)) + 1;
-  const cap = Math.min(INSTA_MAX_SOURCE_EDGE, maxEdge);
-  const zoom = pickFetchZoom(bounds, cap, Math.min(NATIVE_TILE_ZOOM, wanted));
-  const [w, h] = worldSize(bounds, zoom).map((v) => Math.max(1, Math.round(v)));
-  const ai = Math.max(w, h) < INSTA_AI_BELOW && Math.max(w, h) * 2 <= maxEdge;
-  const factor = ai ? 2 : 1;
-  return { zoom, srcW: w, srcH: h, ai, factor, outW: w * factor, outH: h * factor };
-}
+import { captureSource, pickFetchZoom, polishCanvas, metersPerPixel, worldSize, tileCount } from './enhance.js';
 
 const FONT = '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif';
+
+/**
+ * Plan für einen Ausschnitt: höchste verfügbare Kachelstufe (20, rund 10 cm),
+ * zurückgenommen, bis die längste Kante den Deckel (Leinwandgrenze des Browsers,
+ * höchstens INSTA_MAX_SOURCE_EDGE) einhält; dazu Grösse und Kachelzahl.
+ */
+export function planInsta(bounds, maxEdge = 4096) {
+  const cap = Math.min(INSTA_MAX_SOURCE_EDGE, maxEdge);
+  const zoom = pickFetchZoom(bounds, cap);
+  const [w, h] = worldSize(bounds, zoom).map((v) => Math.max(1, Math.round(v)));
+  return { zoom, outW: w, outH: h, tiles: tileCount(bounds, zoom) };
+}
 
 // ---------------------------------------------------------------------------
 // Ortsbestimmung
@@ -85,8 +81,6 @@ export async function lookupPlace(bounds, { signal } = {}) {
       const kind = String(a.objektart || a.objektklasse || '');
       const rank = rankKind(kind);
       const p = geometryPoint(r.geometry);
-      // Abstand zur Mitte in Grad (nur zum Vergleich); Landschaftsnamen bevorzugt,
-      // wenn sie näher an der Mitte liegen als ein weit entfernter Ortsname.
       const nx = p ? (p[0] - cx) / Math.max(dx, 1e-9) : 0, ny = p ? (p[1] - cy) / Math.max(dy, 1e-9) : 0;
       const dist = p ? Math.hypot(nx, ny) : 1.5;
       const outside = p && (Math.abs(nx) > 1 || Math.abs(ny) > 1); // nur im erweiterten Umfeld
@@ -126,48 +120,42 @@ export function formatCoords(lng, lat) {
  * @param {string} p.name        Ortsname (darf leer sein)
  * @param {string} p.subtitle    Zweite Zeile (Gemeinde, Kanton)
  * @param {number|string} p.year Jahr für die Quellenangabe
- * @param {number} p.viewZoom     aktueller Kartenzoom (bestimmt die Kachelstufe)
+ * @param {number} p.maxEdge     Leinwandgrenze des Browsers
+ * @param {boolean} p.label      Ortsangaben einmontieren
  */
-export async function createInstaImage({ bounds, timestamp, name, subtitle, year, viewZoom, maxEdge, onStatus, onProgress, signal }) {
-  const plan = planInsta(bounds, viewZoom, maxEdge);
-  onStatus?.(`Setze Kacheln zusammen (Stufe ${plan.zoom}, ${plan.srcW} × ${plan.srcH} px) …`);
+export async function createInstaImage({ bounds, timestamp, name, subtitle, year, maxEdge, label = true, onStatus, onProgress, signal }) {
+  const plan = planInsta(bounds, maxEdge);
+  onStatus?.(`Lade ${plan.tiles} Kacheln (Stufe ${plan.zoom}) …`);
   const src = await captureSource({
     bounds, fetchZoom: plan.zoom, timestamp, signal,
-    onProgress: (p) => onProgress?.(p * (plan.ai ? 0.15 : 0.5)),
+    onProgress: (p, done, total) => {
+      onProgress?.(p * 0.55);
+      if (total) onStatus?.(`Setze Kacheln zusammen … ${done} / ${total}`);
+    },
   });
   if (src.failed === src.total) throw new Error('Für diesen Ausschnitt gibt es in diesem Jahrgang kein Luftbild.');
 
-  let base = src.canvas;
-  let factor = 1;
-  // Kleine Quellbilder (wenig Kacheln) rechnet die KI noch 2-fach hoch; bei
-  // grossen zählen die echten Pixel, das ist schneller und ehrlicher.
-  if (plan.ai && src.zoom === plan.zoom) {
-    base = await realesrganUpscale(src.canvas, {
-      factor: 2, denoise: INSTA_DENOISE, signal, onStatus,
-      onProgress: (p) => onProgress?.(0.15 + p * 0.6),
-    });
-    factor = 2;
-    src.canvas.width = 0; src.canvas.height = 0; // Speicher freigeben
-  }
-
-  const out = await polishCanvas(base, {
+  const out = await polishCanvas(src.canvas, {
     signal, onStatus,
-    onProgress: (p) => onProgress?.(plan.ai ? 0.75 + p * 0.22 : 0.5 + p * 0.47),
+    onProgress: (p) => onProgress?.(0.55 + p * 0.42),
   });
-  base.width = 0; base.height = 0;
+  src.canvas.width = 0; src.canvas.height = 0; // Speicher freigeben
 
-  onStatus?.('Beschrifte …');
   const cx = (bounds.west + bounds.east) / 2, cy = (bounds.north + bounds.south) / 2;
-  composeLabel(out, {
-    name, subtitle,
-    coords: formatCoords(cx, cy),
-    credit: `© swisstopo · Luftbild ${year}`,
-  });
+  if (label) {
+    onStatus?.('Beschrifte …');
+    composeLabel(out, {
+      name, subtitle,
+      coords: formatCoords(cx, cy),
+      credit: `© swisstopo · Luftbild ${year}`,
+    });
+  }
   onProgress?.(1);
-  const mpp = metersPerPixel(cy, src.zoom) / factor;
+  const mpp = metersPerPixel(cy, src.zoom);
   return {
     canvas: out, width: out.width, height: out.height,
-    sourceZoom: src.zoom, ai: factor > 1, metersPerPx: mpp, widthM: out.width * mpp,
+    sourceZoom: src.zoom, tiles: src.total, missing: src.failed,
+    metersPerPx: mpp, widthM: out.width * mpp,
   };
 }
 
@@ -191,10 +179,10 @@ function measureSpaced(ctx, text, spacing) {
 export function composeLabel(canvas, { name = '', subtitle = '', coords = '', credit = '' }) {
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
-  const u = W / 1000; // Masseinheit: Promille der Bildbreite
+  const u = Math.min(W, H) / 1000; // Masseinheit: Promille der kürzeren Kante
 
   // Dunkler Verlauf unten, damit Weiss auf jedem Untergrund lesbar bleibt.
-  const gh = Math.round(H * 0.36);
+  const gh = Math.round(Math.min(H * 0.36, 360 * u));
   const g = ctx.createLinearGradient(0, H - gh, 0, H);
   g.addColorStop(0, 'rgba(0,0,0,0)');
   g.addColorStop(0.55, 'rgba(0,0,0,0.28)');

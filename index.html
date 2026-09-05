@@ -108,6 +108,7 @@
       </div>
       <div class="in-row">
         <span id="in-info" class="in-info">Rahmen ziehen, Karte darunter bewegen</span>
+        <label class="in-check" title="Ortsname, Gemeinde und Koordinaten ins Bild schreiben"><input id="in-label" type="checkbox" checked><span>Text</span></label>
         <button id="in-run" class="btn-primary" type="button">Bild erstellen</button>
       </div>
     </div>
@@ -127,10 +128,12 @@
         <div class="in-preview"><img id="in-preview" alt="Fertiges Bild"></div>
         <div id="in-meta" class="up-meta"></div>
         <div class="up-row">
-          <button id="in-download" class="btn-primary" type="button">JPEG herunterladen</button>
+          <button id="in-download" class="btn-primary" type="button">PNG herunterladen</button>
+          <button id="in-download-jpeg" class="btn-secondary" type="button">JPEG</button>
           <button id="in-share" class="btn-secondary" type="button" hidden>Teilen</button>
           <button id="in-again" class="btn-secondary" type="button">Neuer Ausschnitt</button>
         </div>
+        <div id="in-result-status" class="up-meta" aria-live="polite"></div>
       </div>
     </div>
   </section>
@@ -151,16 +154,16 @@
         <li><strong>Ortsnamen und Gelände:</strong> Namen aus swissNAMES3D, nur als Schriftzüge gezeichnet, und die Reliefschattierung aus swissALTI3D, einblendbar über den Ebenen-Knopf.</li>
       </ul>
       <h3>Insta-Bild</h3>
-      <p>Rahmen aufziehen (1:1 oder 4:5), Ortsname prüfen, «Bild erstellen». Die App lädt die Kacheln eine Stufe feiner, als der Bildschirm sie zeigt (bis 10 000 Pixel Kante, je nach Gerät), und setzt sie zusammen; kleine Ausschnitte schärft das kompakte Real-ESRGAN zusätzlich 2-fach (Glättung 50 %). Dann werden Farben und Schärfe veredelt und Ortsname, Gemeinde und Koordinaten weiss ins Bild montiert. Alles rechnet das eigene Gerät; es wird kein Bild hochgeladen. Danach herunterladen oder direkt teilen.</p>
+      <p>Rahmen aufziehen (1:1 oder 4:5), Ortsname prüfen, «Bild erstellen». Die App lädt alle Luftbild-Kacheln unter dem Rahmen in der höchsten verfügbaren Auflösung (Stufe 20, rund 10 cm je Pixel; bis 10 000 Pixel Kante, je nach Gerät) und setzt sie zu einem Bild zusammen. Dann folgt der Foto-Filter für Luftaufnahmen mit Insta-Look: Dunst entfernen, Farben kräftigen, leichte Wärme, Klarheit, sanfte Schärfe, dezente Vignette. Auf Wunsch werden Ortsname, Gemeinde und Koordinaten weiss ins Bild montiert. Alles rechnet das eigene Gerät; es wird kein Bild hochgeladen. Danach als PNG oder JPEG herunterladen oder direkt teilen.</p>
       <h3>Orte von oben</h3>
-      <p>Der Würfel fliegt zu einem bekannten Ort der Schweiz: Matterhorn, Rheinfall, Kapellbrücke, Landwasserviadukt und viele mehr.</p>
+      <p>Der Würfel fliegt zu einem bekannten Ort der Schweiz: Matterhorn, Rheinfall, Kapellbrücke, Landwasserviadukt und viele mehr. Die genaue Lage wird beim Anspringen über das Ortsverzeichnis von swisstopo bestimmt.</p>
       <h3>Bedienung</h3>
       <ul>
         <li>Regler ziehen oder ◀ ▶ tippen; Pfeiltasten und Leertaste funktionieren auch.</li>
         <li>▶ spielt alle Jahrgänge nacheinander ab.</li>
         <li>Suche oben: jede Adresse oder jeder Ort in der Schweiz.</li>
       </ul>
-      <p class="fineprint">Luftbilder und Fachdaten © swisstopo, Nutzung gemäss <a href="https://www.geo.admin.ch/de/allgemeine-nutzungsbedingungen-bgdi" target="_blank" rel="noopener">Nutzungsbedingungen BGDI</a>. Karte: MapLibre GL JS. KI-Modell: Real-ESRGAN (BSD-3).</p>
+      <p class="fineprint">Luftbilder und Fachdaten © swisstopo, Nutzung gemäss <a href="https://www.geo.admin.ch/de/allgemeine-nutzungsbedingungen-bgdi" target="_blank" rel="noopener">Nutzungsbedingungen BGDI</a>. Karte: MapLibre GL JS. Filter: TensorFlow.js.</p>
     </div>
   </section>
 

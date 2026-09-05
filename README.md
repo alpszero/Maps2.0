@@ -11,7 +11,7 @@ Dazu kommen vier Dinge, nicht mehr:
 
 * **Suche**: jede Adresse oder jeder Ort in der Schweiz.
 * **Ortsnamen und Gelände**: über den Ebenen-Knopf einblendbar.
-* **Insta-Bild**: Ausschnitt wählen, ein Knopf, fertiges Bild mit Ortsangaben.
+* **Insta-Bild**: Ausschnitt wählen, ein Knopf: Luftbild in voller Auflösung zusammengesetzt, gefiltert, als PNG.
 * **Orte von oben**: der Würfel fliegt zu einem bekannten Ort der Schweiz.
 
 ## Woher die Daten kommen
@@ -34,8 +34,8 @@ Wo nicht geflogen wurde, bleibt die Fläche leer. © swisstopo
 
 ## Betrieb
 
-Reine statische Web-App ohne Build-Schritt. MapLibre GL JS, TensorFlow.js und die
-Modellgewichte liegen unter `vendor/`, es wird nichts von einem CDN nachgeladen.
+Reine statische Web-App ohne Build-Schritt. MapLibre GL JS und TensorFlow.js
+liegen unter `vendor/`, es wird nichts von einem CDN nachgeladen.
 
 Lokal starten (ES-Module brauchen einen HTTP-Server, `file://` genügt nicht):
 
@@ -60,15 +60,14 @@ js/timeline.js        Jahrgänge: Überblendung ohne Flackern, Vorladen der Nach
 js/search.js          Ortssuche mit Vorschlägen
 js/layers.js          Einblendbare Ebenen (Ortsnamen, Gelände)
 js/frame.js           Geografisch verankerter, ziehbarer Rahmen mit Seitenverhältnis
-js/enhance.js         Kacheln zusammensetzen, Real-ESRGAN kompakt, Veredelung, Export
+js/enhance.js         Kacheln zusammensetzen, Foto-Filter, Export
 js/insta.js           Insta-Bild: Ortsbestimmung, Ablauf, Beschriftung
 js/insta-ui.js        Insta-Bild: Bedienleiste und Ergebnis
-js/places.js          Bekannte Orte der Schweiz (Liste) und Zufallswahl
+js/places.js          Bekannte Orte der Schweiz (Liste), Zufallswahl, Lage nachschärfen
 js/geoadmin.js        Zugriff auf die geo.admin.ch-Dienste
 js/config.js          Dienste, Ebenen, Verhalten
 vendor/maplibre-gl/   MapLibre GL JS (BSD-3-Lizenz)
-vendor/tfjs/          TensorFlow.js (Apache-2.0), wird erst fürs Insta-Bild geladen
-vendor/realesrgan/    Real-ESRGAN-Gewichte «realesr-general-x4v3» (BSD-3), 9.7 MB
+vendor/tfjs/          TensorFlow.js (Apache-2.0), wird erst für den Filter geladen
 ```
 
 ### Suche
@@ -94,52 +93,55 @@ dem Luftbild (WMTS; liefert der Dienst keine Kachel, Fallback auf WMS).
 
 ### Insta-Bild
 
-Ziel: mit möglichst wenigen Schritten zu einem Bild, das man direkt posten kann.
+Ziel: mit möglichst wenigen Schritten zu einem Bild in voller Auflösung, das man
+posten, drucken oder aufhängen kann.
 
 1. **Rahmen** (`js/frame.js`): quadratisch (1:1) oder hochkant (4:5), geografisch
    verankert, Eckgriffe ändern die Grösse, die Karte lässt sich darunter bewegen.
-   Der Jahrgang ist der gerade eingestellte.
+   Der Jahrgang ist der gerade eingestellte. Die Leiste zeigt Bodenmasse,
+   Pixelgrösse, Megapixel und Kachelzahl schon vor dem Start.
 2. **Ortsname**: wird aus swissNAMES3D für den Ausschnitt ermittelt (Orte und
    Quartiere vor Flurnamen, Gebäude zuletzt), Gemeinde und Kanton aus
    swissBOUNDARIES3D; steht der Rahmen auf einem Ort aus der eingebauten Liste, gilt
-   dessen Name. Das Feld lässt sich überschreiben.
-3. **Bild erstellen** (`js/insta.js`, `js/enhance.js`): Die Kacheln werden eine
-   Stufe feiner geladen, als der Bildschirm sie zeigt (bei hochauflösenden
-   Bildschirmen zählt deren Pixeldichte mit), höchstens Stufe 20 (rund 10 cm)
-   und höchstens so, dass die längste Kante 10 000 Pixel nicht übersteigt; die
-   Leinwandgrenze des Browsers wird einmal gemessen (4096 bis 10 240 Pixel,
-   auf Handys bis 8192) und deckelt zusätzlich. So kommt echte Auflösung ins
-   Bild, auch für den Druck. Ist das Quellbild kleiner als 1024 Pixel
-   (kleiner Rahmen, wenige Kacheln), rechnet das kompakte Real-ESRGAN
-   («realesr-general-x4v3», 33 Faltungsschichten) es 2-fach mit Glättung 50 %
-   hoch: Das Netz arbeitet fest 4-fach, das 2-fach-Ergebnis entsteht durch
-   Mittelung; die Glättung mischt die Gewichte des normalen und des
-   rauschunterdrückenden Modells linear, wie `denoise_strength` im Original.
-   Grössere Quellbilder bleiben bei ihren echten Pixeln. Anschliessend die
-   Foto-Veredelung: Tonwerte sanft strecken (aus dem ganzen Bild bestimmt),
-   Farben um rund ein Fünftel kräftigen, mildes Kontrast-S, Unschärfemaske.
-   Zum Schluss die Beschriftung in Weiss über einem dunklen Verlauf: Ortsname gross
-   in Grossbuchstaben mit Sperrung, dünne Linie, Gemeinde und Kanton, Koordinaten
-   (WGS84, vier Nachkommastellen), rechts klein «© swisstopo · Luftbild Jahr».
-4. **Ergebnis**: JPEG (Qualität 93 %) herunterladen oder, wo der Browser Dateien
-   teilen kann (iOS, Android), direkt in die Teilen-Übersicht geben. Die Leiste
-   zeigt die erwartete Grösse schon vor dem Start.
-   Es verlässt kein Bild das Gerät.
+   dessen Name. Das Feld lässt sich überschreiben; «Text» schaltet die
+   Beschriftung aus.
+3. **Bild erstellen** (`js/insta.js`, `js/enhance.js`): Alle Kacheln unter dem
+   Rahmen werden auf der höchsten verfügbaren Stufe (20, rund 10 cm je Pixel)
+   geladen und zusammengesetzt, acht parallel. Deckel ist die längste Kante von
+   10 000 Pixeln und die einmal gemessene Leinwandgrenze des Browsers (4096 bis
+   10 240, auf Handys bis 8192); reicht das nicht, geht die Stufe eine Stufe
+   zurück. Ein Quadratkilometer ergibt so rund 10 000 × 10 000 Pixel aus 1600
+   Kacheln. Dann der **Foto-Filter für Luftaufnahmen mit Insta-Look**
+   (TensorFlow.js auf der Grafikeinheit, kachelweise à 512 px mit Rand): Dunst
+   entfernen durch sanfte Tonwertstreckung (0.5 bis 99.5 Prozent, aus dem ganzen
+   Bild bestimmt, damit alle Kacheln gleich behandelt werden), mildes Kontrast-S,
+   Farben um gut ein Viertel kräftiger, leichte Wärme, Klarheit (lokaler
+   Kontrast mit grossem Radius), feine Schärfung (Unschärfemaske) und eine
+   dezente Vignette zu den Ecken. Zum Schluss wahlweise die Beschriftung in
+   Weiss über einem dunklen Verlauf: Ortsname gross in Grossbuchstaben mit
+   Sperrung, dünne Linie, Gemeinde und Kanton, Koordinaten (WGS84, vier
+   Nachkommastellen), rechts klein «© swisstopo · Luftbild Jahr».
+4. **Ergebnis**: Vorschau verkleinert (1600 px), Download als PNG (verlustfrei)
+   oder JPEG (Qualität 93 %), Teilen als JPEG, wo der Browser Dateien teilen
+   kann (iOS, Android). Die Dateien werden erst beim Klick erzeugt; ein
+   100-Megapixel-PNG kann über 100 MB gross werden. Es verlässt kein Bild das
+   Gerät.
 
-Tempo: Rechen-Backend WebGPU, wo verfügbar, sonst WebGL; grössere Rechenkacheln
-auf Desktop-Geräten; der Bildschirm wird während der Berechnung wach gehalten.
-Das Modell wurde mit `vendor/realesrgan/convert.py` ohne PyTorch aus den
-Original-Gewichten umgewandelt und in TensorFlow.js nachgebaut; die
-Vorwärtsrechnung ist gegen eine NumPy-Referenz geprüft. Das Modell ist auf
-allgemeine Fotografien trainiert; es schärft Kanten und Texturen, kann aber
-Details erfinden, die in der Aufnahme nicht existieren.
+Tempo: Rechen-Backend WebGPU, wo verfügbar, sonst WebGL; der Bildschirm wird
+während der Berechnung wach gehalten. Speicher: Quell- und Ergebnisbild liegen
+kurz gleichzeitig vor (je 4 Byte pro Pixel), das Quellbild wird danach sofort
+freigegeben.
 
 ### Orte von oben
 
 `js/places.js` enthält rund 80 bekannte Orte mit Lage und passender Zoomstufe
 (Matterhorn, Rheinfall, Kapellbrücke, Landwasserviadukt, Kloster Müstair …). Der
 Würfel fliegt zu einem zufälligen Ort und zeigt Namen und Zusatz in einer kleinen
-Karte; «Nächster» würfelt weiter. Das Insta-Bild übernimmt den Namen, wenn der
+Karte; «Nächster» würfelt weiter. Die eingebauten Koordinaten sind nur Näherung:
+Beim Anspringen wird der Ort über das Ortsverzeichnis von swisstopo
+(`SearchServer`) gesucht und die Lage des ersten Treffers verwendet, sofern er
+höchstens 3 km von der Näherung entfernt liegt (Schutz vor Namensvettern); sonst
+bleibt die Näherung. Für mehrdeutige Namen gibt es eigene Suchbegriffe. Das Insta-Bild übernimmt den Namen, wenn der
 Rahmen auf einem dieser Orte steht.
 
 ### Wie der Jahrgangswechsel flüssig bleibt
