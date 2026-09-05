@@ -97,8 +97,9 @@ dem Luftbild (WMTS; liefert der Dienst keine Kachel, Fallback auf WMS).
 Ziel: mit möglichst wenigen Schritten zu einem Bild in voller Auflösung, das man
 posten, drucken oder aufhängen kann.
 
-1. **Rahmen** (`js/frame.js`): quadratisch (1:1) oder hochkant (4:5), geografisch
-   verankert, Eckgriffe ändern die Grösse, die Karte lässt sich darunter bewegen.
+1. **Rahmen** (`js/frame.js`): quadratisch (1:1) oder hochkant (4:5), beim Öffnen
+   auf 80 % des sichtbaren Kartenausschnitts gesetzt, geografisch verankert,
+   Eckgriffe ändern die Grösse, die Karte lässt sich darunter bewegen.
    Der Jahrgang ist der gerade eingestellte. Die Leiste zeigt Bodenmasse,
    Pixelgrösse, Megapixel und Kachelzahl schon vor dem Start.
 2. **Ortsname und Zusatz**: Der Name ist nie leer. Steht der Rahmen auf einem Ort
@@ -141,8 +142,10 @@ freigegeben.
 
 ### Orte von oben
 
-`js/places.js` enthält rund 80 bekannte Orte mit Lage und passender Zoomstufe
-(Matterhorn, Rheinfall, Kapellbrücke, Landwasserviadukt, Kloster Müstair …). Der
+`js/places.js` enthält über 220 bekannte Orte mit Lage, passender Zoomstufe und
+Zusatzzeile: Gipfel und Pässe, Seen und Wasserfälle, Bergdörfer, Schlösser,
+Klöster, Römerstätten, Altstädte und Kantonshauptorte (Matterhorn, Rheinfall,
+Kapellbrücke, Landwasserviadukt, Kloster Müstair, Grimselpass, Caumasee …). Der
 Würfel fliegt zu einem zufälligen Ort und zeigt Namen und Zusatz in einer kleinen
 Karte; «Nächster» würfelt weiter. Die eingebauten Koordinaten sind nur Näherung:
 Beim Anspringen wird der Ort über das Ortsverzeichnis von swisstopo

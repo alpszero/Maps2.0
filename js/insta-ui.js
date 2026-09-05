@@ -46,8 +46,8 @@ export function setupInsta({ map, button, panel, frame, getYear, closeOthers, on
     button.setAttribute('aria-expanded', 'true');
     document.body.classList.add('is-framing');
     frame.setAspect(ui.aspect45.classList.contains('is-active') ? 0.8 : 1);
-    frame.reset(400);
     frame.show();
+    frame.fitView(0.8); // 80 % des sichtbaren Kartenausschnitts
     showStep(1);
     state.nameDirty = false;
     state.tagDirty = false;
