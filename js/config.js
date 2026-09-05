@@ -46,10 +46,10 @@ export const OVERLAYS = [
   {
     key: 'names',
     label: 'Ortsnamen',
-    note: 'Geografische Namen (swissNAMES3D)',
-    // Beschriftungsebene des Geoportals; als WMS ausgeliefert.
-    wms: 'ch.swisstopo.swissnames3d',
-    opacity: 1,
+    note: 'Nur Beschriftungen, aus swissNAMES3D',
+    // Die WMS-Ebene zeichnet auch Flächennamen als Schraffur; darum werden die
+    // Namen als Punkte abgefragt und nur die Schriftzüge selbst gezeichnet.
+    labels: 'ch.swisstopo.swissnames3d',
   },
   {
     key: 'terrain',
@@ -67,9 +67,10 @@ export const MUNICIPALITY_LAYER = 'ch.swisstopo.swissboundaries3d-gemeinde-flaec
 
 // Insta-Bild: Kacheln eine Stufe feiner als die Kartenansicht laden, höchstens
 // aber so, dass die längste Kante des Quellbilds INSTA_MAX_SOURCE_EDGE nicht
-// übersteigt. Ist das Quellbild kleiner als INSTA_AI_BELOW, wird es mit dem
+// übersteigt (zusätzlich gedeckelt durch die Leinwandgrenze des Browsers, siehe
+// maxCanvasEdge). Ist das Quellbild kleiner als INSTA_AI_BELOW, wird es mit dem
 // kompakten Real-ESRGAN 2-fach hochgerechnet; sonst zählen die echten Pixel.
-export const INSTA_MAX_SOURCE_EDGE = 2048;
+export const INSTA_MAX_SOURCE_EDGE = 10000;
 export const INSTA_AI_BELOW = 1024;
 // Glättung des kompakten Real-ESRGAN (0 = keine, 1 = maximal).
 export const INSTA_DENOISE = 0.5;

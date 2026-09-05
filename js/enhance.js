@@ -17,6 +17,48 @@ const TILE = 256;
 const EARTH = 40075016.686;
 
 // ---------------------------------------------------------------------------
+// Leinwandgrenze
+
+/**
+ * Grösste Leinwandkante, die dieser Browser verarbeiten kann. Wird einmal
+ * gemessen (Leinwand anlegen, Pixel schreiben und zurücklesen), weil die Grenze
+ * je nach Gerät zwischen 4096 und 16384 Pixeln liegt.
+ */
+let maxEdgePromise = null;
+export function maxCanvasEdge() {
+  if (!maxEdgePromise) {
+    maxEdgePromise = (async () => {
+      const mobile = (navigator.maxTouchPoints || 0) > 1 && Math.min(screen.width, screen.height) < 900;
+      const candidates = mobile ? [4096, 6144, 8192] : [4096, 8192, 10240];
+      let ok = 4096;
+      for (const edge of candidates) {
+        await new Promise((r) => setTimeout(r, 0));
+        if (!canvasWorks(edge)) break;
+        ok = edge;
+      }
+      return ok;
+    })();
+  }
+  return maxEdgePromise;
+}
+
+function canvasWorks(edge) {
+  try {
+    const c = document.createElement('canvas');
+    c.width = edge; c.height = edge;
+    const ctx = c.getContext('2d');
+    if (!ctx) return false;
+    ctx.fillStyle = '#7b3';
+    ctx.fillRect(edge - 2, edge - 2, 2, 2);
+    const p = ctx.getImageData(edge - 1, edge - 1, 1, 1).data;
+    c.width = 1; c.height = 1; // Speicher freigeben
+    return p[3] === 255 && p[1] > 100;
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Ausschnitt
 
 /** Grösse des Ausschnitts in Weltpixeln auf einer Kachelstufe. */

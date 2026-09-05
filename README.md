@@ -25,7 +25,7 @@ Alles stammt von swisstopo über die offenen Dienste des Bundes-Geoportals
 | Jahrgänge      | `api3.geo.admin.ch/rest/services/api/MapServer/layersConfig` → `timestamps` der Ebene   |
 | Aufnahmejahr   | Identify auf `ch.swisstopo.swissimage-product.metadata` für die Bildmitte, je Jahrgang    |
 | Ortssuche      | `api3.geo.admin.ch/rest/services/api/SearchServer?type=locations`                        |
-| Ortsnamen      | WMS `ch.swisstopo.swissnames3d`                                                          |
+| Ortsnamen      | Identify (Rechteck) auf `ch.swisstopo.swissnames3d`, als Schriftzüge gezeichnet          |
 | Gelände        | WMTS `ch.swisstopo.swissalti3d-reliefschattierung` (Fallback WMS)                        |
 | Ortsangaben    | Identify (Rechteck) auf `ch.swisstopo.swissnames3d`, Identify (Punkt) auf `ch.swisstopo.swissboundaries3d-gemeinde-flaeche.fill` |
 
@@ -83,11 +83,14 @@ schon gesucht, gewürfelt oder die Karte gezogen hat.
 
 ### Ortsnamen und Gelände
 
-Zwei Schalter. Ortsnamen kommen als WMS-Beschriftungsebene (swissNAMES3D), das
-Gelände als Reliefschattierung aus swissALTI3D mit 45 % Deckkraft über dem
-Luftbild. Die Namen liegen immer über dem Relief. Liefert der WMTS-Dienst für eine
-Ebene keine Kachel (Probe-Anfrage unter der Bildmitte), wird auf den WMS-Dienst
-ausgewichen.
+Zwei Schalter. Die Ortsnamen werden nicht als WMS-Ebene eingeblendet, weil diese
+auch Flächennamen als Schraffur einzeichnet; stattdessen fragt `js/layers.js` die
+Namen als Punkte aus swissNAMES3D für den sichtbaren Ausschnitt ab (Identify mit
+Rechteck, bis 200 Treffer) und zeichnet nur die Schriftzüge, ab Zoomstufe 11:
+Orte zuerst, Quartiere ab 13, Landschaftsnamen ab 12, Flurnamen ab 15, Gebäude
+und Haltestellen erst ab 19. Überlappende Schriftzüge weichen den wichtigeren.
+Das Gelände kommt als Reliefschattierung aus swissALTI3D mit 45 % Deckkraft über
+dem Luftbild (WMTS; liefert der Dienst keine Kachel, Fallback auf WMS).
 
 ### Insta-Bild
 
@@ -103,8 +106,10 @@ Ziel: mit möglichst wenigen Schritten zu einem Bild, das man direkt posten kann
 3. **Bild erstellen** (`js/insta.js`, `js/enhance.js`): Die Kacheln werden eine
    Stufe feiner geladen, als der Bildschirm sie zeigt (bei hochauflösenden
    Bildschirmen zählt deren Pixeldichte mit), höchstens Stufe 20 (rund 10 cm)
-   und höchstens so, dass die längste Kante 2048 Pixel nicht übersteigt. So
-   kommt echte Auflösung ins Bild. Ist das Quellbild kleiner als 1024 Pixel
+   und höchstens so, dass die längste Kante 10 000 Pixel nicht übersteigt; die
+   Leinwandgrenze des Browsers wird einmal gemessen (4096 bis 10 240 Pixel,
+   auf Handys bis 8192) und deckelt zusätzlich. So kommt echte Auflösung ins
+   Bild, auch für den Druck. Ist das Quellbild kleiner als 1024 Pixel
    (kleiner Rahmen, wenige Kacheln), rechnet das kompakte Real-ESRGAN
    («realesr-general-x4v3», 33 Faltungsschichten) es 2-fach mit Glättung 50 %
    hoch: Das Netz arbeitet fest 4-fach, das 2-fach-Ergebnis entsteht durch
@@ -117,8 +122,8 @@ Ziel: mit möglichst wenigen Schritten zu einem Bild, das man direkt posten kann
    in Grossbuchstaben mit Sperrung, dünne Linie, Gemeinde und Kanton, Koordinaten
    (WGS84, vier Nachkommastellen), rechts klein «© swisstopo · Luftbild Jahr».
 4. **Ergebnis**: JPEG (Qualität 93 %) herunterladen oder, wo der Browser Dateien
-   teilen kann (iOS, Android), direkt in die Teilen-Übersicht geben. Ausgabe bis
-   2048 Pixel Kante; die Leiste zeigt die erwartete Grösse schon vor dem Start.
+   teilen kann (iOS, Android), direkt in die Teilen-Übersicht geben. Die Leiste
+   zeigt die erwartete Grösse schon vor dem Start.
    Es verlässt kein Bild das Gerät.
 
 Tempo: Rechen-Backend WebGPU, wo verfügbar, sonst WebGL; grössere Rechenkacheln

@@ -1,7 +1,7 @@
 // Oberfläche des Insta-Bilds: Rahmen aufziehen, Ortsname prüfen, Bild erstellen,
 // herunterladen oder teilen. Bewusst wenige Schritte.
 
-import { describeBounds, formatMeters, keepAwake, canvasToBlob } from './enhance.js';
+import { describeBounds, formatMeters, keepAwake, canvasToBlob, maxCanvasEdge } from './enhance.js';
 import { createInstaImage, lookupPlace, subtitleFor, planInsta } from './insta.js';
 import { placeNear } from './places.js';
 
@@ -29,8 +29,9 @@ export function setupInsta({ map, button, panel, frame, getYear, closeOthers, on
   };
   const state = {
     open: false, controller: null, lookup: null, lookupTimer: null,
-    place: null, nameDirty: false, result: null, url: null, blob: null,
+    place: null, nameDirty: false, result: null, url: null, blob: null, maxEdge: 4096,
   };
+  maxCanvasEdge().then((edge) => { state.maxEdge = edge; updateInfo(); });
 
   function open() {
     closeOthers();
@@ -84,7 +85,7 @@ export function setupInsta({ map, button, panel, frame, getYear, closeOthers, on
     if (!b) return;
     const d = describeBounds(b);
     const y = getYear();
-    const p = planInsta(b, map.getZoom());
+    const p = planInsta(b, map.getZoom(), state.maxEdge);
     ui.info.textContent = `${formatMeters(d.widthM)} × ${formatMeters(d.heightM)} · ${p.outW} × ${p.outH} px${p.ai ? ' (KI 2×)' : ''} · Jahrgang ${y.year}`;
   }
   frame.onChange(() => { updateInfo(); scheduleLookup(); });
@@ -134,7 +135,7 @@ export function setupInsta({ map, button, panel, frame, getYear, closeOthers, on
       const res = await createInstaImage({
         bounds, timestamp: y.ts, name,
         subtitle: subtitleFor(state.place, name),
-        year: y.year, viewZoom: map.getZoom(), signal,
+        year: y.year, viewZoom: map.getZoom(), maxEdge: state.maxEdge, signal,
         onStatus: (s) => { ui.status.textContent = s; },
         onProgress: (p) => { ui.progressBar.style.width = `${Math.round(p * 100)}%`; },
       });
