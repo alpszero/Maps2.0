@@ -197,6 +197,23 @@ export async function identifyEnvelope(bounds, layer, { returnGeometry = true, l
   return data?.results || [];
 }
 
+/** WGS84 → LV95 (Näherungsformeln von swisstopo, auf etwa einen Meter genau). */
+export function toLV95(lng, lat) {
+  const p = (lat * 3600 - 169028.66) / 10000;
+  const l = (lng * 3600 - 26782.5) / 10000;
+  const e = 2600072.37 + 211455.93 * l - 10938.51 * l * p - 0.36 * l * p * p - 44.54 * l ** 3;
+  const n = 1200147.07 + 308807.95 * p + 3745.25 * l * l + 76.63 * p * p - 194.56 * l * l * p + 119.79 * p ** 3;
+  return { e, n };
+}
+
+/** Höhe über Meer (swissALTI3D) für einen Punkt, in Metern; null wenn nicht verfügbar. */
+export async function heightAt(lng, lat, { signal } = {}) {
+  const { e, n } = toLV95(lng, lat);
+  const data = await fetchJson(`${API_BASE}/height?easting=${e.toFixed(1)}&northing=${n.toFixed(1)}&sr=2056`, { signal });
+  const h = Number(data?.height);
+  return Number.isFinite(h) ? h : null;
+}
+
 // ---------------------------------------------------------------------------
 // Aufnahmejahr (Metadaten der SWISSIMAGE Zeitreise)
 

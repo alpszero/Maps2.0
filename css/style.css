@@ -386,6 +386,7 @@ input[type="range"]::-moz-range-thumb {
   font: inherit; font-size: 16px; font-weight: 600; padding: 0 12px;
 }
 .in-info { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.in-tag { font-weight: 400; font-size: 14px; height: 36px; }
 .in-check { display: flex; align-items: center; gap: 6px; flex: none; font-size: 13px; font-weight: 600; cursor: pointer; }
 .in-check input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
 .insta-panel .panel-close { width: 36px; height: 36px; font-size: 24px; }

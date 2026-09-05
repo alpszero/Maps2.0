@@ -65,6 +65,24 @@ export const OVERLAYS = [
 export const NAMES_LAYER = 'ch.swisstopo.swissnames3d';
 export const MUNICIPALITY_LAYER = 'ch.swisstopo.swissboundaries3d-gemeinde-flaeche.fill';
 
+// Inventare des Bundes für die Zusatzzeile, in dieser Reihenfolge geprüft.
+// Unbekannte oder nicht erreichbare Ebenen werden übersprungen.
+export const INVENTORY_LAYERS = [
+  { layer: 'ch.bak.schutzgebiete-unesco_weltkulturerbe', prefix: 'UNESCO-Welterbe' },
+  { layer: 'ch.bafu.schutzgebiete-unesco_weltnaturerbe', prefix: 'UNESCO-Weltnaturerbe' },
+  { layer: 'ch.bafu.schutzgebiete-paerke_nationaler_bedeutung', prefix: 'Park von nationaler Bedeutung' },
+  { layer: 'ch.bafu.bundesinventare-bln', prefix: 'Landschaft von nationaler Bedeutung' },
+  { layer: 'ch.bak.bundesinventar-schuetzenswerte-ortsbilder', prefix: 'Ortsbild von nationaler Bedeutung' },
+];
+
+export const CANTONS = {
+  ZH: 'Zürich', BE: 'Bern', LU: 'Luzern', UR: 'Uri', SZ: 'Schwyz', OW: 'Obwalden', NW: 'Nidwalden',
+  GL: 'Glarus', ZG: 'Zug', FR: 'Freiburg', SO: 'Solothurn', BS: 'Basel-Stadt', BL: 'Basel-Landschaft',
+  SH: 'Schaffhausen', AR: 'Appenzell Ausserrhoden', AI: 'Appenzell Innerrhoden', SG: 'St. Gallen',
+  GR: 'Graubünden', AG: 'Aargau', TG: 'Thurgau', TI: 'Tessin', VD: 'Waadt', VS: 'Wallis',
+  NE: 'Neuenburg', GE: 'Genf', JU: 'Jura',
+};
+
 // Insta-Bild: Kacheln auf der höchsten verfügbaren Stufe laden, höchstens aber
 // so, dass die längste Kante INSTA_MAX_SOURCE_EDGE nicht übersteigt (zusätzlich
 // gedeckelt durch die Leinwandgrenze des Browsers, siehe maxCanvasEdge).

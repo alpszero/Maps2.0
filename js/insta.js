@@ -2,8 +2,9 @@
 // Luftaufnahmen anwenden und Ortsangaben (Name, Gemeinde, Koordinaten) weiss
 // einmontieren.
 
-import { NAMES_LAYER, MUNICIPALITY_LAYER, INSTA_MAX_SOURCE_EDGE } from './config.js';
-import { identifyEnvelope, identifyLayer } from './geoadmin.js';
+import { NAMES_LAYER, MUNICIPALITY_LAYER, INVENTORY_LAYERS, CANTONS, INSTA_MAX_SOURCE_EDGE } from './config.js';
+import { identifyEnvelope, identifyLayer, heightAt } from './geoadmin.js';
+import { placeNear } from './places.js';
 import { captureSource, pickFetchZoom, polishCanvas, metersPerPixel, worldSize, tileCount } from './enhance.js';
 
 const FONT = '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif';
@@ -37,9 +38,13 @@ function rankKind(kind) {
 
 function attrName(attrs) {
   if (!attrs) return '';
-  for (const k of ['name', 'gemname', 'label', 'bezeichnung', 'name_de', 'text']) {
+  for (const k of ['name', 'gemname', 'bln_name', 'we_name', 'park_name', 'ortsbild', 'label', 'bezeichnung', 'name_de', 'text']) {
     const v = attrs[k];
     if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  // Sonst das erste Textattribut, das nach einem Namen aussieht.
+  for (const [k, v] of Object.entries(attrs)) {
+    if (typeof v === 'string' && v.trim().length > 2 && !/id|uuid|url|date|datum/i.test(k) && !/^\d+$/.test(v.trim())) return v.trim();
   }
   return '';
 }
@@ -52,16 +57,23 @@ function geometryPoint(geometry) {
 }
 
 /**
- * Ermittelt Name, Gemeinde und Kanton für einen Ausschnitt.
- * @returns {{name:string, kind:string, municipality:string, canton:string}}
+ * Ermittelt Name, Gemeinde, Kanton und eine Zusatzzeile für einen Ausschnitt.
+ * Der Name ist nie leer: Ortsname aus swissNAMES3D, sonst bekannter Ort in der
+ * Nähe, sonst Gemeinde, sonst Kanton, sonst «Schweiz». Die Zusatzzeile kommt
+ * vom bekannten Ort (kuratiert), sonst aus den Inventaren des Bundes (UNESCO,
+ * Pärke, BLN, Ortsbilder), sonst Kanton und Höhe über Meer.
+ * @returns {{name, kind, municipality, canton, cantonName, tagline, height}}
  */
 export async function lookupPlace(bounds, { signal } = {}) {
   const cx = (bounds.west + bounds.east) / 2, cy = (bounds.north + bounds.south) / 2;
   const dx = (bounds.east - bounds.west) * 0.5, dy = (bounds.north - bounds.south) * 0.5;
   const wide = { west: bounds.west - dx, east: bounds.east + dx, south: bounds.south - dy, north: bounds.north + dy };
-  const [names, muni] = await Promise.allSettled([
+  const known = placeNear(cx, cy, Math.max(350, Math.hypot(dx, dy) * 111000));
+  const [names, muni, height, ...inv] = await Promise.allSettled([
     identifyEnvelope(wide, NAMES_LAYER, { signal }),
     identifyLayer(cx, cy, MUNICIPALITY_LAYER, { signal }),
+    heightAt(cx, cy, { signal }),
+    ...INVENTORY_LAYERS.map((l) => identifyLayer(cx, cy, l.layer, { signal })),
   ]);
   if (signal?.aborted) throw new DOMException('Abgebrochen', 'AbortError');
 
@@ -69,8 +81,9 @@ export async function lookupPlace(bounds, { signal } = {}) {
   if (muni.status === 'fulfilled' && muni.value[0]) {
     const a = muni.value[0].attributes || {};
     municipality = attrName(a);
-    canton = String(a.kanton || a.canton || a.kt || '').trim();
+    canton = String(a.kanton || a.canton || a.kt || '').trim().toUpperCase();
   }
+  const cantonName = CANTONS[canton] || '';
 
   let best = null;
   if (names.status === 'fulfilled') {
@@ -88,10 +101,32 @@ export async function lookupPlace(bounds, { signal } = {}) {
       if (!best || score < best.score) best = { name, kind, score };
     }
   }
+
+  // Zusatzzeile
+  let tagline = '';
+  if (known?.tag) tagline = known.tag;
+  else {
+    for (let i = 0; i < INVENTORY_LAYERS.length && !tagline; i++) {
+      const r = inv[i];
+      if (r.status !== 'fulfilled' || !r.value[0]) continue;
+      const n = attrName(r.value[0].attributes);
+      const prefix = INVENTORY_LAYERS[i].prefix;
+      tagline = n && n.toLowerCase() !== (municipality || '').toLowerCase() ? `${prefix} · ${n}` : prefix;
+    }
+  }
+  const h = height.status === 'fulfilled' && height.value !== null ? Math.round(height.value) : null;
+  if (!tagline) {
+    const parts = [];
+    if (cantonName) parts.push(`Kanton ${cantonName}`);
+    if (h !== null) parts.push(`${h} m ü. M.`);
+    tagline = parts.join(' · ');
+  }
+
+  const name = known?.name || best?.name || municipality || cantonName || 'Schweiz';
   return {
-    name: best?.name || municipality || '',
-    kind: best?.kind || (municipality ? 'Gemeinde' : ''),
-    municipality, canton,
+    name,
+    kind: known ? 'Bekannter Ort' : best?.kind || (municipality ? 'Gemeinde' : ''),
+    municipality, canton, cantonName, tagline, height: h,
   };
 }
 
@@ -101,7 +136,8 @@ export function subtitleFor(place, name) {
   if (place?.municipality && place.municipality.toLowerCase() !== n) {
     return place.canton ? `${place.municipality} ${place.canton}` : place.municipality;
   }
-  return place?.canton ? `Schweiz · ${place.canton}` : 'Schweiz';
+  if (place?.cantonName && place.cantonName.toLowerCase() !== n) return `Kanton ${place.cantonName}`;
+  return 'Schweiz';
 }
 
 /** «47.3665° N   8.5412° E» */
@@ -119,11 +155,12 @@ export function formatCoords(lng, lat) {
  * @param {string} p.timestamp   WMTS-Zeitstempel des Jahrgangs
  * @param {string} p.name        Ortsname (darf leer sein)
  * @param {string} p.subtitle    Zweite Zeile (Gemeinde, Kanton)
+ * @param {string} p.tagline     Zusatzzeile (Beschreibung)
  * @param {number|string} p.year Jahr für die Quellenangabe
  * @param {number} p.maxEdge     Leinwandgrenze des Browsers
  * @param {boolean} p.label      Ortsangaben einmontieren
  */
-export async function createInstaImage({ bounds, timestamp, name, subtitle, year, maxEdge, label = true, onStatus, onProgress, signal }) {
+export async function createInstaImage({ bounds, timestamp, name, subtitle, tagline, year, maxEdge, label = true, onStatus, onProgress, signal }) {
   const plan = planInsta(bounds, maxEdge);
   onStatus?.(`Lade ${plan.tiles} Kacheln (Stufe ${plan.zoom}) …`);
   const src = await captureSource({
@@ -145,7 +182,7 @@ export async function createInstaImage({ bounds, timestamp, name, subtitle, year
   if (label) {
     onStatus?.('Beschrifte …');
     composeLabel(out, {
-      name, subtitle,
+      name, subtitle, tagline,
       coords: formatCoords(cx, cy),
       credit: `© swisstopo · Luftbild ${year}`,
     });
@@ -176,13 +213,13 @@ function measureSpaced(ctx, text, spacing) {
   return Math.max(0, w - spacing);
 }
 
-export function composeLabel(canvas, { name = '', subtitle = '', coords = '', credit = '' }) {
+export function composeLabel(canvas, { name = '', subtitle = '', tagline = '', coords = '', credit = '' }) {
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
   const u = Math.min(W, H) / 1000; // Masseinheit: Promille der kürzeren Kante
 
   // Dunkler Verlauf unten, damit Weiss auf jedem Untergrund lesbar bleibt.
-  const gh = Math.round(Math.min(H * 0.36, 360 * u));
+  const gh = Math.round(Math.min(H * 0.4, 400 * u));
   const g = ctx.createLinearGradient(0, H - gh, 0, H);
   g.addColorStop(0, 'rgba(0,0,0,0)');
   g.addColorStop(0.55, 'rgba(0,0,0,0.28)');
@@ -216,6 +253,16 @@ export function composeLabel(canvas, { name = '', subtitle = '', coords = '', cr
     ctx.restore();
   }
   y -= coordSize * 1.85;
+
+  // Zusatzzeile (Beschreibung), leicht und kursiv
+  if (tagline) {
+    const s = 24 * u;
+    ctx.font = `italic 300 ${s}px ${FONT}`;
+    ctx.globalAlpha = 0.92;
+    drawSpaced(ctx, tagline, margin, y, s * 0.06);
+    ctx.globalAlpha = 1;
+    y -= s * 1.6;
+  }
 
   // Untertitel (Gemeinde, Kanton)
   if (subtitle) {

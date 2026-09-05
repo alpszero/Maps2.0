@@ -28,6 +28,7 @@ Alles stammt von swisstopo über die offenen Dienste des Bundes-Geoportals
 | Ortsnamen      | Identify (Rechteck) auf `ch.swisstopo.swissnames3d`, als Schriftzüge gezeichnet          |
 | Gelände        | WMTS `ch.swisstopo.swissalti3d-reliefschattierung` (Fallback WMS)                        |
 | Ortsangaben    | Identify (Rechteck) auf `ch.swisstopo.swissnames3d`, Identify (Punkt) auf `ch.swisstopo.swissboundaries3d-gemeinde-flaeche.fill` |
+| Zusatzzeile    | Identify (Punkt) auf Inventare (UNESCO, Pärke, BLN, ISOS), Höhendienst `api3.geo.admin.ch/rest/services/height` |
 
 Abgedeckt ist nur die Schweiz, und nicht jeder Jahrgang deckt jeden Ort ab.
 Wo nicht geflogen wurde, bleibt die Fläche leer. © swisstopo
@@ -100,11 +101,17 @@ posten, drucken oder aufhängen kann.
    verankert, Eckgriffe ändern die Grösse, die Karte lässt sich darunter bewegen.
    Der Jahrgang ist der gerade eingestellte. Die Leiste zeigt Bodenmasse,
    Pixelgrösse, Megapixel und Kachelzahl schon vor dem Start.
-2. **Ortsname**: wird aus swissNAMES3D für den Ausschnitt ermittelt (Orte und
-   Quartiere vor Flurnamen, Gebäude zuletzt), Gemeinde und Kanton aus
-   swissBOUNDARIES3D; steht der Rahmen auf einem Ort aus der eingebauten Liste, gilt
-   dessen Name. Das Feld lässt sich überschreiben; «Text» schaltet die
-   Beschriftung aus.
+2. **Ortsname und Zusatz**: Der Name ist nie leer. Steht der Rahmen auf einem Ort
+   aus der eingebauten Liste, gilt dessen Name; sonst der beste Name aus
+   swissNAMES3D für den Ausschnitt (Orte und Quartiere vor Flurnamen, Gebäude
+   zuletzt), sonst die Gemeinde aus swissBOUNDARIES3D, sonst der Kanton, sonst
+   «Schweiz». Die Zusatzzeile ist für die bekannten Orte kuratiert («Höchstgelegener
+   Bahnhof Europas, 3454 m», «UNESCO-Welterbe seit 1983»); sonst wird die
+   Bildmitte gegen die Inventare des Bundes geprüft (UNESCO-Welterbe, Pärke von
+   nationaler Bedeutung, BLN-Landschaften, Ortsbilder von nationaler Bedeutung,
+   Ebenen in `config.js`), und als letzte Stufe stehen Kanton und Höhe über Meer
+   aus dem Höhendienst von swisstopo («Kanton Bern · 542 m ü. M.»). Beide Felder
+   lassen sich überschreiben; «Text» schaltet die Beschriftung ganz aus.
 3. **Bild erstellen** (`js/insta.js`, `js/enhance.js`): Alle Kacheln unter dem
    Rahmen werden auf der höchsten verfügbaren Stufe (20, rund 10 cm je Pixel)
    geladen und zusammengesetzt, acht parallel. Deckel ist die längste Kante von
@@ -119,8 +126,8 @@ posten, drucken oder aufhängen kann.
    Kontrast mit grossem Radius), feine Schärfung (Unschärfemaske) und eine
    dezente Vignette zu den Ecken. Zum Schluss wahlweise die Beschriftung in
    Weiss über einem dunklen Verlauf: Ortsname gross in Grossbuchstaben mit
-   Sperrung, dünne Linie, Gemeinde und Kanton, Koordinaten (WGS84, vier
-   Nachkommastellen), rechts klein «© swisstopo · Luftbild Jahr».
+   Sperrung, dünne Linie, Gemeinde und Kanton, Zusatzzeile kursiv, Koordinaten
+   (WGS84, vier Nachkommastellen), rechts klein «© swisstopo · Luftbild Jahr».
 4. **Ergebnis**: Vorschau verkleinert (1600 px), Download als PNG (verlustfrei)
    oder JPEG (Qualität 93 %), Teilen als JPEG, wo der Browser Dateien teilen
    kann (iOS, Android). Die Dateien werden erst beim Klick erzeugt; ein
