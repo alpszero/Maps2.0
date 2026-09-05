@@ -144,7 +144,7 @@ export function setupAnimate({ map, button, panel, frame, getEntries, closeOther
       if (col.frames.length < 2) throw new Error('Für diesen Ausschnitt gibt es zu wenige Jahrgänge mit Bild.');
       const opts = { ...col, holdMs, fadeMs, fps, signal, onStatus, onProgress: (p) => { ui.progressBar.style.width = `${Math.round(60 + p * 40)}%`; } };
       const out = ui.formatGif.checked ? await encodeGif(col.frames, opts) : await recordVideo(col.frames, opts);
-      state.result = { ...out, width: col.width, height: col.height, years: col.frames.map((f) => f.year), skipped: col.skipped };
+      state.result = { ...out, width: col.width, height: col.height, years: col.frames.map((f) => f.year), skipped: col.skipped, unchanged: col.unchanged };
       showResult();
     } catch (err) {
       if (err?.name === 'AbortError') ui.status.textContent = 'Abgebrochen.';
@@ -174,7 +174,8 @@ export function setupAnimate({ map, button, panel, frame, getEntries, closeOther
     }
     const mb = (r.blob.size / 1048576).toFixed(1);
     const skipped = r.skipped.length ? ` · ohne Bild: ${r.skipped.join(', ')}` : '';
-    ui.meta.textContent = `${r.ext.toUpperCase()} · ${r.width} × ${r.height} px · ${r.years.length} Jahrgänge (${r.years[0]} bis ${r.years[r.years.length - 1]}) · ${(r.durationMs / 1000).toFixed(0)} s · ${mb} MB${skipped}`;
+    const unchanged = r.unchanged?.length ? ` · unverändert (ausgelassen): ${r.unchanged.join(', ')}` : '';
+    ui.meta.textContent = `${r.ext.toUpperCase()} · ${r.width} × ${r.height} px · ${r.years.length} Jahrgänge mit Veränderung (${r.years[0]} bis ${r.years[r.years.length - 1]}) · ${(r.durationMs / 1000).toFixed(0)} s · ${mb} MB${skipped}${unchanged}`;
     ui.status.textContent = '';
     ui.progress.hidden = true;
     ui.result.hidden = false;

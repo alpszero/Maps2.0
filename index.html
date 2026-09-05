@@ -190,25 +190,17 @@
     </div>
   </section>
 
-  <section id="quiz-panel" class="panel is-compact" hidden aria-label="Quiz">
-    <div class="panel-head">
-      <h2>Wo ist das?</h2>
+  <section id="quiz-panel" class="panel qz-panel" hidden aria-label="Quiz">
+    <div class="qz-bar">
+      <select id="qz-mode" class="qz-mode" aria-label="Modus"></select>
+      <span id="qz-status" class="qz-status" aria-live="polite"></span>
+      <span id="qz-score" class="qz-score" aria-label="Punktestand"></span>
+      <button id="qz-start" class="qz-btn" type="button">Start</button>
+      <button id="qz-next" class="qz-btn qz-btn-accent" type="button" hidden>Weiter</button>
       <button class="panel-close" type="button" aria-label="Schliessen">×</button>
     </div>
-    <div class="up-step">
-      <div class="up-row">
-        <label class="up-field"><span class="up-label">Modus</span><select id="qz-mode"></select></label>
-        <button id="qz-start" class="btn-primary" type="button">Neue Runde</button>
-      </div>
-      <div id="qz-mode-note" class="up-hint"></div>
-      <div id="qz-status" class="up-info" aria-live="polite"></div>
-      <div id="qz-answers" class="qz-answers"></div>
-      <div id="qz-feedback" class="qz-feedback" aria-live="polite"></div>
-      <div class="up-row up-result-head">
-        <span id="qz-score" class="up-meta"></span>
-        <button id="qz-next" class="btn-secondary" type="button" hidden>Nächste Runde</button>
-      </div>
-    </div>
+    <div id="qz-answers" class="qz-answers"></div>
+    <div id="qz-feedback" class="qz-feedback" aria-live="polite"></div>
   </section>
 
   <section id="upscale-panel" class="panel" hidden aria-label="Hochskalieren">
