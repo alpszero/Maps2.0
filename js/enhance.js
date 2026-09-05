@@ -1,13 +1,13 @@
-// Bildaufbereitung im Browser: Kacheln eines Ausschnitts zusammensetzen,
-// mit dem kompakten Real-ESRGAN 2-fach hochrechnen und veredeln.
+// Bildaufbereitung im Browser: Kacheln eines Ausschnitts in voller Auflösung
+// zusammensetzen und mit einem Foto-Filter für Luftaufnahmen veredeln.
 //
-//  1. Die Kacheln werden auf der höchsten sinnvollen SWISSIMAGE-Stufe (EPSG:3857,
-//     bis Stufe 20, ≈10 cm) geladen und zu einem Quellbild zusammengesetzt.
-//  2. Real-ESRGAN kompakt («realesr-general-x4v3», SRVGGNetCompact) rechnet
-//     patchweise mit Überlappung 4-fach; das 2-fach-Ergebnis entsteht durch
-//     Mittelung. Die Glättung mischt die Gewichte des normalen und des
-//     rauschunterdrückenden Modells linear (wie denoise_strength im Original).
-//  3. Veredelung: Tonwerte strecken, Farben kräftigen, sanft nachschärfen.
+//  1. Die Kacheln werden auf der höchsten verfügbaren SWISSIMAGE-Stufe
+//     (EPSG:3857, Stufe 20, ≈10 cm) geladen und zu einem Bild zusammengesetzt;
+//     die Leinwandgrenze des Browsers begrenzt die Grösse (4096 bis 10 240 px).
+//  2. Der Filter (TensorFlow.js auf der Grafikeinheit, kachelweise): Dunst
+//     entfernen durch Tonwertstreckung, mildes Kontrast-S, kräftigere Farben,
+//     leichte Wärme, Klarheit (lokaler Kontrast), sanfte Schärfung und eine
+//     dezente Vignette für den Insta-Look.
 
 import { SWISSIMAGE_LAYER, NATIVE_TILE_ZOOM } from './config.js';
 import { wmtsTileUrl } from './geoadmin.js';
@@ -102,8 +102,17 @@ function lngLatToWorldPx(lng, lat, zoom) {
   return [x, y];
 }
 
+/** Anzahl Kacheln, die ein Ausschnitt auf einer Stufe umfasst. */
+export function tileCount(bounds, zoom) {
+  const [x0, y0] = lngLatToWorldPx(bounds.west, bounds.north, zoom);
+  const [x1, y1] = lngLatToWorldPx(bounds.east, bounds.south, zoom);
+  const cols = Math.floor((x1 - 1) / TILE) - Math.floor(x0 / TILE) + 1;
+  const rows = Math.floor((y1 - 1) / TILE) - Math.floor(y0 / TILE) + 1;
+  return Math.max(1, cols) * Math.max(1, rows);
+}
+
 /**
- * Lädt die Kacheln des Ausschnitts und setzt sie zu einem Quellbild zusammen.
+ * Lädt die Kacheln des Ausschnitts und setzt sie zu einem Bild zusammen.
  * Fällt auf die nächsttiefere Stufe zurück, wenn dort keine Kacheln existieren.
  */
 export async function captureSource({ bounds, fetchZoom, timestamp, onProgress, signal }) {
@@ -111,6 +120,7 @@ export async function captureSource({ bounds, fetchZoom, timestamp, onProgress, 
   for (;;) {
     const result = await stitch({ bounds, zoom, timestamp, onProgress, signal });
     if (result.failed < result.total || zoom <= MIN_FETCH_ZOOM) return { ...result, zoom };
+    result.canvas.width = 0; result.canvas.height = 0;
     zoom -= 1; // an dieser Stelle gibt es auf dieser Stufe kein Bild
   }
 }
@@ -149,10 +159,10 @@ async function stitch({ bounds, zoom, timestamp, onProgress, signal }) {
         failed++;
       }
       done++;
-      onProgress?.(done / tiles.length);
+      onProgress?.(done / tiles.length, done, tiles.length);
     }
   };
-  await Promise.all(Array.from({ length: Math.min(6, tiles.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(8, tiles.length) }, worker));
   return { canvas, total: tiles.length, failed };
 }
 
@@ -179,7 +189,7 @@ let backendReady = null;
 /** Rechen-Backend: WebGPU, sonst WebGL, sonst Prozessor. Einmal je Sitzung. */
 export async function ensureBackend(onStatus) {
   if (!window.tf) {
-    onStatus?.('KI-Bibliothek wird geladen …');
+    onStatus?.('Filter-Bibliothek wird geladen …');
     await loadScript('vendor/tfjs/tf.min.js');
   }
   const tf = window.tf;
@@ -205,163 +215,45 @@ export async function ensureBackend(onStatus) {
   return backendReady;
 }
 
-export function backendLabel() {
-  const b = window.tf?.getBackend?.();
-  return b === 'webgpu' ? 'WebGPU' : b === 'webgl' ? 'WebGL' : b === 'cpu' ? 'Prozessor' : '';
-}
-
-/** Grössere Rechenkacheln auf Geräten mit viel Grafikspeicher. */
-function patchSize(base) {
-  const mobile = (navigator.maxTouchPoints || 0) > 1 && Math.min(screen.width, screen.height) < 900;
-  return mobile ? base : base * 2;
-}
-
 /** Bildschirm während der Berechnung wach halten (wo der Browser es erlaubt). */
 export async function keepAwake() {
   try { return await navigator.wakeLock?.request('screen'); } catch { return null; }
 }
 
 // ---------------------------------------------------------------------------
-// Kachelschleife: Quelle spiegelnd auffüllen, in gleich grossen Stücken rechnen,
-// Ränder abschneiden, auf den Zielfaktor mitteln, ins Ergebnis schreiben.
-// forward(x): x [1,h,w,3] 0–1 → [1,h·netScale,w·netScale,3] 0–1
-
-async function runTiled(tf, source, { patch, pad, netScale, factor, forward, onProgress, onStatus, signal }) {
-  const W = source.width, H = source.height;
-  const down = netScale / factor;
-  const out = document.createElement('canvas');
-  out.width = W * factor;
-  out.height = H * factor;
-  const ctx = out.getContext('2d');
-  const cols = Math.ceil(W / patch), rows = Math.ceil(H / patch);
-  const padded = tf.tidy(() => {
-    const img = tf.browser.fromPixels(source).toFloat().div(255);
-    const padW = cols * patch - W, padH = rows * patch - H;
-    const paddings = [[pad, pad + padH], [pad, pad + padW], [0, 0]];
-    const mirrorOk = pad + padH <= H && pad + padW <= W;
-    return mirrorOk ? tf.mirrorPad(img, paddings, 'symmetric') : tf.pad(img, paddings, 0);
-  });
-  const size = patch + 2 * pad;
-  const total = rows * cols;
-  let n = 0;
-  const t0 = performance.now();
-  try {
-    for (let py = 0; py < rows; py++) {
-      for (let px = 0; px < cols; px++) {
-        if (signal?.aborted) throw new DOMException('Abgebrochen', 'AbortError');
-        const pixels = tf.tidy(() => {
-          const x = padded.slice([py * patch, px * patch, 0], [size, size, 3]).expandDims(0);
-          const pred = forward(x);
-          let crop = pred.slice([0, pad * netScale, pad * netScale, 0], [1, patch * netScale, patch * netScale, 3]);
-          if (down > 1) crop = tf.avgPool(crop, down, down, 'valid');
-          return crop.squeeze([0]).clipByValue(0, 1).mul(255).round().toInt();
-        });
-        const data = await tf.browser.toPixels(pixels);
-        pixels.dispose();
-        ctx.putImageData(new ImageData(data, patch * factor, patch * factor), px * patch * factor, py * patch * factor);
-        n++;
-        const remaining = ((performance.now() - t0) / n) * (total - n) / 1000;
-        onProgress?.(n / total);
-        onStatus?.(`Schärfe mit KI … ${n} / ${total}${remaining > 2 ? `, noch etwa ${formatSeconds(remaining)}` : ''}`);
-        await tf.nextFrame();
-      }
-    }
-  } finally {
-    padded.dispose();
-  }
-  return out;
-}
-
-function formatSeconds(s) {
-  return s >= 90 ? `${Math.round(s / 60)} min` : `${Math.round(s)} s`;
-}
-
-// ---------------------------------------------------------------------------
-// Real-ESRGAN kompakt (SRVGGNetCompact «realesr-general-x4v3»)
-//
-// 33 Faltungen à 64 Kanäle mit PReLU auf der Eingangsauflösung, zum Schluss
-// Pixel-Shuffle (depthToSpace) auf 4×, plus das 4-fach vergrösserte Original.
-
-let resrFiles = null;   // {manifest, general, wdn}
-let resrNet = null;     // {denoise, scale, layers:[{type, w, b, a}]}
-
-async function loadRealesrganFiles(onStatus) {
-  if (!resrFiles) {
-    onStatus?.('KI-Modell wird geladen (9.7 MB) …');
-    resrFiles = Promise.all([
-      fetch('vendor/realesrgan/manifest.json').then((r) => r.json()),
-      fetch('vendor/realesrgan/general.bin').then((r) => r.arrayBuffer()),
-      fetch('vendor/realesrgan/wdn.bin').then((r) => r.arrayBuffer()),
-    ]).then(([manifest, g, w]) => ({ manifest, general: new Float32Array(g), wdn: new Float32Array(w) }))
-      .catch((err) => { resrFiles = null; throw err; });
-  }
-  return resrFiles;
-}
-
-function buildRealesrgan(tf, files, denoise) {
-  const { manifest, general, wdn } = files;
-  const s = Math.max(0, Math.min(1, denoise));
-  const mixed = new Float32Array(general.length);
-  for (let i = 0; i < mixed.length; i++) mixed[i] = (1 - s) * general[i] + s * wdn[i];
-  const take = ({ offset, shape }) => tf.tensor(mixed.subarray(offset, offset + shape.reduce((a, b) => a * b, 1)), shape);
-  const layers = manifest.layers.map((l) => (l.type === 'conv'
-    ? { type: 'conv', w: take(l.w), b: take(l.b) }
-    : { type: 'prelu', a: take(l.a) }));
-  return { denoise: s, scale: manifest.scale, layers };
-}
-
-function disposeRealesrgan(net) {
-  for (const l of net.layers) for (const k of ['w', 'b', 'a']) l[k]?.dispose();
-}
-
-/** Vorwärtsrechnung: x [1,h,w,3] im Bereich 0–1 → [1,4h,4w,3] */
-function realesrganForward(tf, net, x) {
-  return tf.tidy(() => {
-    let out = x;
-    for (const l of net.layers) {
-      out = l.type === 'conv' ? tf.conv2d(out, l.w, 1, 'same').add(l.b) : tf.prelu(out, l.a);
-    }
-    out = tf.depthToSpace(out, net.scale);
-    const base = tf.image.resizeNearestNeighbor(x, [x.shape[1] * net.scale, x.shape[2] * net.scale]);
-    return out.add(base);
-  });
-}
-
-async function getRealesrgan(tf, denoise, onStatus) {
-  const files = await loadRealesrganFiles(onStatus);
-  if (!resrNet || Math.abs(resrNet.denoise - denoise) > 1e-6) {
-    if (resrNet) disposeRealesrgan(resrNet);
-    resrNet = buildRealesrgan(tf, files, denoise);
-  }
-  return resrNet;
-}
-
-/** Vergrössert eine Leinwand mit Real-ESRGAN kompakt (Faktor 2 oder 4). */
-export async function realesrganUpscale(source, { factor = 2, denoise = 0.5, onProgress, onStatus, signal } = {}) {
-  await ensureBackend(onStatus);
-  const tf = window.tf;
-  const net = await getRealesrgan(tf, denoise, onStatus);
-  onStatus?.(`Schärfe mit KI (${backendLabel()}) …`);
-  return runTiled(tf, source, {
-    patch: patchSize(96), pad: 12, netScale: net.scale, factor,
-    forward: (x) => realesrganForward(tf, net, x),
-    onProgress, onStatus, signal,
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Veredelung: Tonwerte strecken, Farben kräftigen, sanft nachschärfen.
+// Foto-Filter für Luftaufnahmen mit Insta-Look
 //
 // Die Tonwertgrenzen werden einmal aus dem ganzen Bild bestimmt, damit alle
-// Kacheln gleich behandelt werden. Die Rechnung läuft kachelweise.
+// Kacheln gleich behandelt werden. Die Rechnung läuft kachelweise (512 px mit
+// Rand), damit auch sehr grosse Bilder in den Grafikspeicher passen.
 
 const POLISH_TILE = 512;
-const POLISH_PAD = 8;
+const POLISH_PAD = 12;
 
-export async function polishCanvas(canvas, { onProgress, onStatus, signal, strength = 1 } = {}) {
+export const FILTER_DEFAULTS = {
+  contrast: 0.08,   // mildes Kontrast-S
+  saturation: 0.28, // Farben kräftigen
+  warmth: 0.035,    // leichte Wärme (Rot +, Blau −)
+  clarity: 0.22,    // lokaler Kontrast (Unschärfemaske mit grossem Radius)
+  sharpen: 0.5,     // feine Schärfung
+  vignette: 0.16,   // Abdunkeln zu den Ecken
+};
+
+/** Gauss-Kern [k, k, 3, 1] für tf.depthwiseConv2d. */
+function gaussKernel(tf, size, sigma) {
+  const half = (size - 1) / 2;
+  const g = [];
+  let s = 0;
+  for (let i = 0; i < size; i++) { const v = Math.exp(-((i - half) ** 2) / (2 * sigma * sigma)); g.push(v); s += v; }
+  const values = [];
+  for (let i = 0; i < size; i++) for (let j = 0; j < size; j++) { const v = (g[i] / s) * (g[j] / s); for (let c = 0; c < 3; c++) values.push(v); }
+  return tf.tensor4d(values, [size, size, 3, 1]);
+}
+
+export async function polishCanvas(canvas, { onProgress, onStatus, signal, params = FILTER_DEFAULTS } = {}) {
   await ensureBackend(onStatus);
   const tf = window.tf;
-  onStatus?.('Veredle Farben und Schärfe …');
+  onStatus?.('Filter: Dunst, Farben, Klarheit, Schärfe, Vignette …');
   const { lo, hi } = tonalRange(canvas);
   const W = canvas.width, H = canvas.height;
   const src = canvas.getContext('2d', { willReadFrequently: true });
@@ -369,20 +261,14 @@ export async function polishCanvas(canvas, { onProgress, onStatus, signal, stren
   out.width = W;
   out.height = H;
   const octx = out.getContext('2d');
-  const kernel = tf.tidy(() => {
-    // 5×5-Gauss (σ ≈ 1.1), je Kanal gleich, für die Unschärfemaske
-    const g = [0.0561, 0.1353, 0.1353 * 1.36, 0.1353, 0.0561];
-    const k = [];
-    let sum = 0;
-    for (let i = 0; i < 5; i++) for (let j = 0; j < 5; j++) { const v = g[i] * g[j]; k.push(v); sum += v; }
-    const values = [];
-    for (const v of k) for (let c = 0; c < 3; c++) values.push(v / sum);
-    return tf.tensor4d(values, [5, 5, 3, 1]);
-  });
-  const sat = 1 + 0.22 * strength;
-  const sharpen = 0.55 * strength;
-  const contrast = 1 + 0.06 * strength;
+  const fine = gaussKernel(tf, 5, 1.1);
+  const coarse = gaussKernel(tf, 11, 3.2);
+  const warm = tf.tensor1d([1 + params.warmth, 1, 1 - params.warmth]);
+  const lumW = tf.tensor1d([0.299, 0.587, 0.114]);
+  const contrast = 1 + params.contrast;
+  const sat = 1 + params.saturation;
   const cols = Math.ceil(W / POLISH_TILE), rows = Math.ceil(H / POLISH_TILE);
+  const halfDiag = Math.hypot(W, H) / 2;
   let n = 0;
   try {
     for (let ty = 0; ty < rows; ty++) {
@@ -391,20 +277,34 @@ export async function polishCanvas(canvas, { onProgress, onStatus, signal, stren
         const x0 = Math.max(0, tx * POLISH_TILE - POLISH_PAD), y0 = Math.max(0, ty * POLISH_TILE - POLISH_PAD);
         const x1 = Math.min(W, (tx + 1) * POLISH_TILE + POLISH_PAD), y1 = Math.min(H, (ty + 1) * POLISH_TILE + POLISH_PAD);
         const img = src.getImageData(x0, y0, x1 - x0, y1 - y0);
+        const cx = tx * POLISH_TILE - x0, cy = ty * POLISH_TILE - y0;
+        const cw = Math.min(POLISH_TILE, W - tx * POLISH_TILE), ch = Math.min(POLISH_TILE, H - ty * POLISH_TILE);
         const pixels = tf.tidy(() => {
           let t = tf.browser.fromPixels(img).toFloat().div(255);
+          // Dunst entfernen: Tonwerte strecken, mildes Kontrast-S
           t = t.sub(lo).div(Math.max(0.2, hi - lo)).clipByValue(0, 1);
           t = t.sub(0.5).mul(contrast).add(0.5);
-          const lum = t.mul(tf.tensor1d([0.299, 0.587, 0.114])).sum(-1, true);
-          t = lum.add(t.sub(lum).mul(sat));
-          const blur = tf.depthwiseConv2d(t.expandDims(0), kernel, 1, 'same').squeeze([0]);
-          t = t.add(t.sub(blur).mul(sharpen));
-          const cx = tx * POLISH_TILE - x0, cy = ty * POLISH_TILE - y0;
-          const cw = Math.min(POLISH_TILE, W - tx * POLISH_TILE), ch = Math.min(POLISH_TILE, H - ty * POLISH_TILE);
-          return t.slice([cy, cx, 0], [ch, cw, 3]).clipByValue(0, 1).mul(255).round().toInt();
+          // Farben kräftigen (über die Helligkeit), leichte Wärme
+          const lum = t.mul(lumW).sum(-1, true);
+          t = lum.add(t.sub(lum).mul(sat)).mul(warm);
+          // Klarheit (grosser Radius) und feine Schärfung (kleiner Radius)
+          const t4 = t.expandDims(0);
+          const blurC = tf.depthwiseConv2d(t4, coarse, 1, 'same').squeeze([0]);
+          const blurF = tf.depthwiseConv2d(t4, fine, 1, 'same').squeeze([0]);
+          t = t.add(t.sub(blurC).mul(params.clarity)).add(t.sub(blurF).mul(params.sharpen));
+          // Auf den Kern der Kachel zuschneiden
+          t = t.slice([cy, cx, 0], [ch, cw, 3]);
+          // Vignette: Abstand zur Bildmitte, normiert auf die halbe Diagonale
+          if (params.vignette > 0) {
+            const xs = tf.linspace(tx * POLISH_TILE - W / 2 + 0.5, tx * POLISH_TILE + cw - W / 2 - 0.5, cw).div(halfDiag).square().reshape([1, cw, 1]);
+            const ys = tf.linspace(ty * POLISH_TILE - H / 2 + 0.5, ty * POLISH_TILE + ch - H / 2 - 0.5, ch).div(halfDiag).square().reshape([ch, 1, 1]);
+            const r2 = xs.add(ys); // 0 in der Mitte, 1 in den Ecken
+            const factor = tf.scalar(1).sub(r2.mul(r2).mul(params.vignette));
+            t = t.mul(factor);
+          }
+          return t.clipByValue(0, 1).mul(255).round().toInt();
         });
         const data = await tf.browser.toPixels(pixels);
-        const [ch, cw] = pixels.shape;
         pixels.dispose();
         octx.putImageData(new ImageData(data, cw, ch), tx * POLISH_TILE, ty * POLISH_TILE);
         n++;
@@ -413,7 +313,7 @@ export async function polishCanvas(canvas, { onProgress, onStatus, signal, stren
       }
     }
   } finally {
-    kernel.dispose();
+    fine.dispose(); coarse.dispose(); warm.dispose(); lumW.dispose();
   }
   return out;
 }
@@ -444,28 +344,25 @@ function tonalRange(canvas) {
 // ---------------------------------------------------------------------------
 // Export
 
-export function canvasToBlob(canvas, type = 'image/jpeg', quality = 0.93) {
+export function canvasToBlob(canvas, type = 'image/png', quality) {
   return new Promise((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Bild konnte nicht erzeugt werden'))), type, quality);
   });
 }
 
-export function formatMeters(m) {
-  return m >= 1 ? `${m.toFixed(m < 10 ? 1 : 0)} m` : `${Math.round(m * 100)} cm`;
+/** Verkleinerte Kopie (längste Kante `edge`), z. B. für die Vorschau. */
+export function scaledCopy(canvas, edge) {
+  const s = Math.min(1, edge / Math.max(canvas.width, canvas.height));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(canvas.width * s));
+  c.height = Math.max(1, Math.round(canvas.height * s));
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(canvas, 0, 0, c.width, c.height);
+  return c;
 }
 
-// Für Tests: direkter Zugriff auf die Vorwärtsrechnung.
-if (typeof window !== 'undefined') {
-  window.__enhanceDebug = {
-    async realesrganForward(data, h, w, denoise) {
-      await ensureBackend();
-      const tf = window.tf;
-      const net = await getRealesrgan(tf, denoise);
-      const x = tf.tensor4d(data, [1, h, w, 3]);
-      const y = realesrganForward(tf, net, x);
-      const res = Array.from(await y.data());
-      x.dispose(); y.dispose();
-      return res;
-    },
-  };
+export function formatMeters(m) {
+  if (m >= 1000) return `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km`;
+  return m >= 1 ? `${m.toFixed(m < 10 ? 1 : 0)} m` : `${Math.round(m * 100)} cm`;
 }

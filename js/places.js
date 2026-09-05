@@ -1,5 +1,9 @@
 // Bekannte Orte der Schweiz von oben: eingebaute Liste mit Lage und passender
-// Zoomstufe für die Zufallsfunktion.
+// Zoomstufe für die Zufallsfunktion. Die Lage wird beim Anspringen über das
+// Ortsverzeichnis von swisstopo nachgeschärft (siehe locatePlace), die Liste
+// dient als Suchbegriff und als Rückfallwert.
+
+import { searchLocations } from './geoadmin.js';
 
 export const PLACES = [
   { name: 'Matterhorn', sub: 'Zermatt VS', lng: 7.6586, lat: 45.9763, zoom: 15 },
@@ -88,6 +92,49 @@ export const PLACES = [
   { name: 'Lac de Moiry', sub: 'Staumauer VS', lng: 7.5810, lat: 46.1400, zoom: 16 },
   { name: 'Stade de Genève', sub: 'Lancy GE', lng: 6.1275, lat: 46.1778, zoom: 17.5 },
 ];
+
+// Suchbegriffe, wo der Name allein im Ortsverzeichnis nicht eindeutig ist.
+const QUERY = {
+  'Berner Altstadt': 'Zytglogge Bern', 'Bürkliplatz': 'Bürkliplatz Zürich', 'Zürich Hauptbahnhof': 'Zürich HB',
+  'Letzigrund': 'Stadion Letzigrund', 'Jet d’eau': "Jet d'eau Genève", 'Palais des Nations': 'Palais des Nations Genève',
+  'Basler Münster': 'Münster Basel', 'St. Jakob-Park': 'St. Jakob-Park Basel', 'Stein am Rhein': 'Stein am Rhein',
+  'Castelgrande': 'Castelgrande Bellinzona', 'Aletschgletscher': 'Konkordiaplatz', 'Lavaux': 'Rivaz',
+  'Lauterbrunnen': 'Staubbachfall', 'Verzasca-Staumauer': 'Diga di Contra', 'Grande Dixence': 'Barrage de la Grande Dixence',
+  'Emosson': "Barrage d'Emosson", 'Gotthardpass': 'Gotthardpass Hospiz', 'Furkapass': 'Hotel Belvédère Furka',
+  'Landwasserviadukt': 'Landwasserviadukt Filisur', 'Rheinschlucht': 'Ruinaulta', 'Sion': 'Château de Valère Sion',
+  'Stiftsbezirk': 'Kathedrale St. Gallen', 'Appenzell': 'Appenzell', 'Interlaken': 'Höhematte Interlaken',
+  'Bachalpsee': 'Bachalpsee', 'Davos': 'Davos Platz', 'Morteratschgletscher': 'Vadret da Morteratsch',
+  'Lago Bianco': 'Lago Bianco', 'Kloster St. Johann': 'Kloster St. Johann Müstair', 'Chur': 'Chur Altstadt',
+  'Therme Vals': 'Therme Vals', 'Bürgenstock': 'Bürgenstock', 'Wasserschloss': 'Wasserschloss Brugg',
+  'Lugano': 'Parco Ciani Lugano', 'Locarno': 'Piazza Grande Locarno', 'Lausanne': 'Cathédrale de Lausanne',
+  'Ouchy': 'Ouchy Lausanne', 'Fribourg': 'Cathédrale Saint-Nicolas Fribourg', 'Solothurn': 'St. Ursen Solothurn',
+  'Zug': 'Zug Altstadt', 'Rapperswil': 'Schloss Rapperswil', 'Lac de Moiry': 'Barrage de Moiry',
+  'Stade de Genève': 'Stade de Genève', 'Uetliberg': 'Uetliberg', 'Flughafen Zürich': 'Flughafen Zürich',
+  'Rütli': 'Rütli Seelisberg', 'Zermatt': 'Zermatt',
+};
+
+const cache = new Map();
+
+/**
+ * Lage eines Orts über das Ortsverzeichnis von swisstopo nachschärfen. Der erste
+ * Treffer zählt, wenn er nahe genug an der eingebauten Lage liegt (sonst bleibt
+ * die Liste massgebend, damit Namensvettern nicht in eine andere Region führen).
+ * @returns {{lng:number, lat:number, source:'gazetteer'|'list'}}
+ */
+export async function locatePlace(place, { signal } = {}) {
+  if (cache.has(place.name)) return cache.get(place.name);
+  const fallback = { lng: place.lng, lat: place.lat, source: 'list' };
+  try {
+    const hits = await searchLocations(QUERY[place.name] || place.name, { signal });
+    const hit = hits.find((h) => Number.isFinite(h.lat) && Number.isFinite(h.lon) && distanceM(h.lon, h.lat, place.lng, place.lat) < 3000);
+    const res = hit ? { lng: hit.lon, lat: hit.lat, source: 'gazetteer' } : fallback;
+    cache.set(place.name, res);
+    return res;
+  } catch (err) {
+    if (err?.name === 'AbortError') throw err;
+    return fallback;
+  }
+}
 
 /** Zufälliger Ort, nicht derselbe wie zuletzt. */
 export function randomPlace(previous = null, rng = Math.random) {
