@@ -2,7 +2,7 @@
 // herunterladen oder teilen. Bewusst wenige Schritte.
 
 import { describeBounds, formatMeters, keepAwake, canvasToBlob } from './enhance.js';
-import { createInstaImage, lookupPlace, subtitleFor } from './insta.js';
+import { createInstaImage, lookupPlace, subtitleFor, planInsta } from './insta.js';
 import { placeNear } from './places.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -84,9 +84,11 @@ export function setupInsta({ map, button, panel, frame, getYear, closeOthers, on
     if (!b) return;
     const d = describeBounds(b);
     const y = getYear();
-    ui.info.textContent = `${formatMeters(d.widthM)} × ${formatMeters(d.heightM)} · Jahrgang ${y.year}`;
+    const p = planInsta(b, map.getZoom());
+    ui.info.textContent = `${formatMeters(d.widthM)} × ${formatMeters(d.heightM)} · ${p.outW} × ${p.outH} px${p.ai ? ' (KI 2×)' : ''} · Jahrgang ${y.year}`;
   }
   frame.onChange(() => { updateInfo(); scheduleLookup(); });
+  map.on('zoom', () => { if (state.open) updateInfo(); });
   map.on('moveend', () => { if (state.open) updateInfo(); });
 
   // Ortsname ermitteln (verzögert, damit beim Ziehen nicht dauernd abgefragt wird)
@@ -132,7 +134,7 @@ export function setupInsta({ map, button, panel, frame, getYear, closeOthers, on
       const res = await createInstaImage({
         bounds, timestamp: y.ts, name,
         subtitle: subtitleFor(state.place, name),
-        year: y.year, signal,
+        year: y.year, viewZoom: map.getZoom(), signal,
         onStatus: (s) => { ui.status.textContent = s; },
         onProgress: (p) => { ui.progressBar.style.width = `${Math.round(p * 100)}%`; },
       });
@@ -157,7 +159,8 @@ export function setupInsta({ map, button, panel, frame, getYear, closeOthers, on
     state.url = URL.createObjectURL(state.blob);
     ui.preview.src = state.url;
     const mb = (state.blob.size / 1048576).toFixed(1);
-    ui.meta.textContent = `${r.width} × ${r.height} px · ${formatMeters(r.widthM)} breit · Jahrgang ${r.year} · ${mb} MB`;
+    const how = r.ai ? `Kachelstufe ${r.sourceZoom}, KI 2×` : `Kachelstufe ${r.sourceZoom}, echte Pixel`;
+    ui.meta.textContent = `${r.width} × ${r.height} px · ${formatMeters(r.widthM)} breit · ${how} · Jahrgang ${r.year} · ${mb} MB`;
     ui.share.hidden = !canShare();
     showStep(3);
   }

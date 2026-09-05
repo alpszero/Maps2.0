@@ -32,11 +32,12 @@ export function metersPerPixel(lat, zoom) {
 }
 
 /**
- * Höchste Kachelstufe, auf der die längste Kante des Ausschnitts höchstens
- * `maxEdge` Pixel misst (nie über der nativen Stufe, nie unter MIN_FETCH_ZOOM).
+ * Kachelstufe für einen Ausschnitt: beginnt bei `startZoom` (Vorgabe: native
+ * Stufe) und geht so weit zurück, dass die längste Kante höchstens `maxEdge`
+ * Pixel misst (nie unter MIN_FETCH_ZOOM).
  */
-export function pickFetchZoom(bounds, maxEdge) {
-  let zoom = NATIVE_TILE_ZOOM;
+export function pickFetchZoom(bounds, maxEdge, startZoom = NATIVE_TILE_ZOOM) {
+  let zoom = Math.max(MIN_FETCH_ZOOM, Math.min(NATIVE_TILE_ZOOM, Math.floor(startZoom)));
   let [w, h] = worldSize(bounds, zoom);
   while (Math.max(w, h) > maxEdge && zoom > MIN_FETCH_ZOOM) { zoom--; [w, h] = worldSize(bounds, zoom); }
   return zoom;

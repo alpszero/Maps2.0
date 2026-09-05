@@ -100,13 +100,17 @@ Ziel: mit möglichst wenigen Schritten zu einem Bild, das man direkt posten kann
    Quartiere vor Flurnamen, Gebäude zuletzt), Gemeinde und Kanton aus
    swissBOUNDARIES3D; steht der Rahmen auf einem Ort aus der eingebauten Liste, gilt
    dessen Name. Das Feld lässt sich überschreiben.
-3. **Bild erstellen** (`js/insta.js`, `js/enhance.js`): Die Kacheln werden auf der
-   höchsten Stufe geladen, bei der die längste Kante höchstens 1024 Pixel misst
-   (bis Stufe 20, rund 10 cm). Dann rechnet das kompakte Real-ESRGAN
-   («realesr-general-x4v3», 33 Faltungsschichten) 2-fach mit Glättung 50 %:
-   Das Netz arbeitet fest 4-fach, das 2-fach-Ergebnis entsteht durch Mittelung;
-   die Glättung mischt die Gewichte des normalen und des rauschunterdrückenden
-   Modells linear, wie `denoise_strength` im Original. Anschliessend die
+3. **Bild erstellen** (`js/insta.js`, `js/enhance.js`): Die Kacheln werden eine
+   Stufe feiner geladen, als der Bildschirm sie zeigt (bei hochauflösenden
+   Bildschirmen zählt deren Pixeldichte mit), höchstens Stufe 20 (rund 10 cm)
+   und höchstens so, dass die längste Kante 2048 Pixel nicht übersteigt. So
+   kommt echte Auflösung ins Bild. Ist das Quellbild kleiner als 1024 Pixel
+   (kleiner Rahmen, wenige Kacheln), rechnet das kompakte Real-ESRGAN
+   («realesr-general-x4v3», 33 Faltungsschichten) es 2-fach mit Glättung 50 %
+   hoch: Das Netz arbeitet fest 4-fach, das 2-fach-Ergebnis entsteht durch
+   Mittelung; die Glättung mischt die Gewichte des normalen und des
+   rauschunterdrückenden Modells linear, wie `denoise_strength` im Original.
+   Grössere Quellbilder bleiben bei ihren echten Pixeln. Anschliessend die
    Foto-Veredelung: Tonwerte sanft strecken (aus dem ganzen Bild bestimmt),
    Farben um rund ein Fünftel kräftigen, mildes Kontrast-S, Unschärfemaske.
    Zum Schluss die Beschriftung in Weiss über einem dunklen Verlauf: Ortsname gross
@@ -114,7 +118,8 @@ Ziel: mit möglichst wenigen Schritten zu einem Bild, das man direkt posten kann
    (WGS84, vier Nachkommastellen), rechts klein «© swisstopo · Luftbild Jahr».
 4. **Ergebnis**: JPEG (Qualität 93 %) herunterladen oder, wo der Browser Dateien
    teilen kann (iOS, Android), direkt in die Teilen-Übersicht geben. Ausgabe bis
-   2048 Pixel Kante. Es verlässt kein Bild das Gerät.
+   2048 Pixel Kante; die Leiste zeigt die erwartete Grösse schon vor dem Start.
+   Es verlässt kein Bild das Gerät.
 
 Tempo: Rechen-Backend WebGPU, wo verfügbar, sonst WebGL; grössere Rechenkacheln
 auf Desktop-Geräten; der Bildschirm wird während der Berechnung wach gehalten.

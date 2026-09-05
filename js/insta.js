@@ -1,9 +1,25 @@
 // Insta-Bild: Ausschnitt laden, mit Real-ESRGAN kompakt 2-fach schärfen,
 // veredeln und Ortsangaben (Name, Gemeinde, Koordinaten) weiss einmontieren.
 
-import { NAMES_LAYER, MUNICIPALITY_LAYER, INSTA_SOURCE_EDGE, INSTA_DENOISE } from './config.js';
+import { NAMES_LAYER, MUNICIPALITY_LAYER, INSTA_MAX_SOURCE_EDGE, INSTA_AI_BELOW, INSTA_DENOISE, NATIVE_TILE_ZOOM } from './config.js';
 import { identifyEnvelope, identifyLayer } from './geoadmin.js';
-import { captureSource, pickFetchZoom, realesrganUpscale, polishCanvas, metersPerPixel } from './enhance.js';
+import { captureSource, pickFetchZoom, realesrganUpscale, polishCanvas, metersPerPixel, worldSize } from './enhance.js';
+
+/**
+ * Plan für einen Ausschnitt bei gegebener Kartenansicht: Kachelstufe eine Stufe
+ * feiner, als der Bildschirm zeigt (bei hochauflösenden Bildschirmen zählt deren
+ * Pixeldichte mit), gedeckelt durch INSTA_MAX_SOURCE_EDGE; dazu, ob die KI das
+ * Quellbild noch 2-fach hochrechnet, und die erwartete Ausgabegrösse.
+ */
+export function planInsta(bounds, viewZoom) {
+  const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+  const wanted = Math.floor(viewZoom + Math.log2(dpr)) + 1;
+  const zoom = pickFetchZoom(bounds, INSTA_MAX_SOURCE_EDGE, Math.min(NATIVE_TILE_ZOOM, wanted));
+  const [w, h] = worldSize(bounds, zoom).map((v) => Math.max(1, Math.round(v)));
+  const ai = Math.max(w, h) < INSTA_AI_BELOW;
+  const factor = ai ? 2 : 1;
+  return { zoom, srcW: w, srcH: h, ai, factor, outW: w * factor, outH: h * factor };
+}
 
 const FONT = '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif';
 
@@ -109,27 +125,35 @@ export function formatCoords(lng, lat) {
  * @param {string} p.name        Ortsname (darf leer sein)
  * @param {string} p.subtitle    Zweite Zeile (Gemeinde, Kanton)
  * @param {number|string} p.year Jahr für die Quellenangabe
+ * @param {number} p.viewZoom     aktueller Kartenzoom (bestimmt die Kachelstufe)
  */
-export async function createInstaImage({ bounds, timestamp, name, subtitle, year, onStatus, onProgress, signal }) {
-  const zoom = pickFetchZoom(bounds, INSTA_SOURCE_EDGE);
-  onStatus?.('Lade Luftbild in voller Auflösung …');
+export async function createInstaImage({ bounds, timestamp, name, subtitle, year, viewZoom, onStatus, onProgress, signal }) {
+  const plan = planInsta(bounds, viewZoom);
+  onStatus?.(`Setze Kacheln zusammen (Stufe ${plan.zoom}, ${plan.srcW} × ${plan.srcH} px) …`);
   const src = await captureSource({
-    bounds, fetchZoom: zoom, timestamp, signal,
-    onProgress: (p) => onProgress?.(p * 0.15),
+    bounds, fetchZoom: plan.zoom, timestamp, signal,
+    onProgress: (p) => onProgress?.(p * (plan.ai ? 0.15 : 0.5)),
   });
   if (src.failed === src.total) throw new Error('Für diesen Ausschnitt gibt es in diesem Jahrgang kein Luftbild.');
 
-  const up = await realesrganUpscale(src.canvas, {
-    factor: 2, denoise: INSTA_DENOISE, signal, onStatus,
-    onProgress: (p) => onProgress?.(0.15 + p * 0.6),
-  });
-  src.canvas.width = 0; src.canvas.height = 0; // Speicher freigeben
+  let base = src.canvas;
+  let factor = 1;
+  // Kleine Quellbilder (wenig Kacheln) rechnet die KI noch 2-fach hoch; bei
+  // grossen zählen die echten Pixel, das ist schneller und ehrlicher.
+  if (plan.ai && src.zoom === plan.zoom) {
+    base = await realesrganUpscale(src.canvas, {
+      factor: 2, denoise: INSTA_DENOISE, signal, onStatus,
+      onProgress: (p) => onProgress?.(0.15 + p * 0.6),
+    });
+    factor = 2;
+    src.canvas.width = 0; src.canvas.height = 0; // Speicher freigeben
+  }
 
-  const out = await polishCanvas(up, {
+  const out = await polishCanvas(base, {
     signal, onStatus,
-    onProgress: (p) => onProgress?.(0.75 + p * 0.22),
+    onProgress: (p) => onProgress?.(plan.ai ? 0.75 + p * 0.22 : 0.5 + p * 0.47),
   });
-  up.width = 0; up.height = 0;
+  base.width = 0; base.height = 0;
 
   onStatus?.('Beschrifte …');
   const cx = (bounds.west + bounds.east) / 2, cy = (bounds.north + bounds.south) / 2;
@@ -139,11 +163,10 @@ export async function createInstaImage({ bounds, timestamp, name, subtitle, year
     credit: `© swisstopo · Luftbild ${year}`,
   });
   onProgress?.(1);
-  const lat = cy;
+  const mpp = metersPerPixel(cy, src.zoom) / factor;
   return {
     canvas: out, width: out.width, height: out.height,
-    sourceZoom: src.zoom, metersPerPx: metersPerPixel(lat, src.zoom) / 2,
-    widthM: out.width * metersPerPixel(lat, src.zoom) / 2,
+    sourceZoom: src.zoom, ai: factor > 1, metersPerPx: mpp, widthM: out.width * mpp,
   };
 }
 
