@@ -55,7 +55,9 @@ Repository-Einstellungen unter *Pages* die Quelle *GitHub Actions* wählen).
 Ausschnitt mit demselben Rahmen wählen, Jahrgänge von/bis, Grösse (360 bis
 1080 px), Standzeit und Überblendung. Die App lädt jeden Jahrgang für den
 Ausschnitt (`js/animate.js`), überspringt Jahrgänge ohne Bild (fehlende Kacheln
-oder überwiegend weisse bzw. schwarze Flächen), blendet mit
+oder überwiegend weisse bzw. schwarze Flächen) sowie Jahrgänge, deren Bild sich
+praktisch nicht vom vorherigen unterscheidet (Mosaik nicht neu beflogen; mittlere
+Helligkeitsabweichung unter 3.5 von 255), blendet mit
 Ease-in-out über und schreibt die Jahreszahl ins Bild. Ausgabe als GIF (gifenc,
 256 Farben je Bild) oder als Video über MediaRecorder: MP4 in Safari, WebM in
 Chrome und Firefox. Die Videoaufnahme läuft in Echtzeit, der Tab muss dabei offen
@@ -65,9 +67,13 @@ bleiben.
 
 Modus Gemeinden: Zufallspunkt in der Schweiz, Identify auf
 `ch.swisstopo.swissboundaries3d-gemeinde-flaeche.fill` liefert Name und Umriss;
-die Karte zoomt auf den Umriss (maximal Stufe 15). Drei weitere Gemeinden dienen
-als Ablenker, eine davon aus der Nähe. Modus Seen: eingebaute Liste der grössten
-Schweizer Seen. Während des Quiz ist die Suchleiste ausgeblendet.
+die Karte springt ohne Kameraflug direkt auf den Umriss (maximal Stufe 15), damit
+die Lage in der Schweiz nicht verraten wird. Während der Runde ist Herauszoomen
+und Wegwandern gesperrt (minZoom und maxBounds), nach der Antwort ist die Karte
+wieder frei. Drei weitere Gemeinden dienen als Ablenker, eine davon aus der Nähe.
+Modus Seen: eingebaute Liste der grössten Schweizer Seen. Während des Quiz sind
+Suchleiste, Jahresanzeige, Regler und Seitenknöpfe ausgeblendet; die Bedienung
+ist eine kompakte Leiste über der Karte.
 
 ## Aufbau
 

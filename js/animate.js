@@ -27,7 +27,7 @@ export async function collectYears({ bounds, entries, size, onStatus, onProgress
   const width = Math.max(2, Math.round(w * scale)) & ~1; // gerade Masse (Videocodecs)
   const height = Math.max(2, Math.round(h * scale)) & ~1;
 
-  const frames = [], skipped = [];
+  const frames = [], skipped = [], unchanged = [];
   for (let i = 0; i < entries.length; i++) {
     if (signal?.aborted) throw new DOMException('Abgebrochen', 'AbortError');
     const e = entries[i];
@@ -41,9 +41,33 @@ export async function collectYears({ bounds, entries, size, onStatus, onProgress
     ctx.drawImage(res.canvas, 0, 0, width, height);
     // Jahrgänge ohne echtes Bild (leer, weiss oder schwarz geliefert) auslassen
     if (blankFraction(ctx, width, height) > 0.35) { skipped.push(e.year); continue; }
+    // Jahrgänge, deren Bild praktisch dem vorherigen entspricht (Mosaik nicht
+    // neu beflogen), ebenfalls auslassen: nur echte Veränderungen animieren.
+    if (frames.length && frameDifference(frames[frames.length - 1].canvas, c) < 3.5) { unchanged.push(e.year); continue; }
     frames.push({ year: e.year, canvas: c });
   }
-  return { frames, width, height, skipped };
+  return { frames, width, height, skipped, unchanged };
+}
+
+/** Mittlere Helligkeitsabweichung zweier Bilder (0–255), auf 64×64 verkleinert. */
+export function frameDifference(a, b) {
+  const n = 64;
+  const small = (src) => {
+    const c = document.createElement('canvas');
+    c.width = n; c.height = n;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(src, 0, 0, n, n);
+    return ctx.getImageData(0, 0, n, n).data;
+  };
+  const da = small(a), db = small(b);
+  let sum = 0;
+  for (let i = 0; i < da.length; i += 4) {
+    const la = 0.299 * da[i] + 0.587 * da[i + 1] + 0.114 * da[i + 2];
+    const lb = 0.299 * db[i] + 0.587 * db[i + 1] + 0.114 * db[i + 2];
+    sum += Math.abs(la - lb);
+  }
+  return sum / (n * n);
 }
 
 /** Anteil der Pixel, die fast weiss oder fast schwarz sind (Stichprobe). */
