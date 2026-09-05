@@ -297,6 +297,21 @@ input[type="range"]::-moz-range-thumb {
 .switch:checked::after { transform: translateX(20px); }
 .switch:disabled { opacity: 0.5; }
 
+/* Ortsnamen als Schriftzüge auf der Karte */
+.name-label {
+  pointer-events: none;
+  white-space: nowrap;
+  color: #fff;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.95), 0 0 6px rgba(0, 0, 0, 0.8), 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+.name-label.rank-0 { font-size: 15px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+.name-label.rank-1 { font-size: 13px; }
+.name-label.rank-2 { font-style: italic; font-weight: 500; color: #e8f1ff; }
+.name-label.rank-3 { font-weight: 500; color: #f0f0e6; }
+
 /* ---------------------------------------------------------------- Orte von oben */
 .place-card {
   position: absolute;

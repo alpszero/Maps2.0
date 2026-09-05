@@ -11,12 +11,13 @@ import { captureSource, pickFetchZoom, realesrganUpscale, polishCanvas, metersPe
  * Pixeldichte mit), gedeckelt durch INSTA_MAX_SOURCE_EDGE; dazu, ob die KI das
  * Quellbild noch 2-fach hochrechnet, und die erwartete Ausgabegrösse.
  */
-export function planInsta(bounds, viewZoom) {
+export function planInsta(bounds, viewZoom, maxEdge = 4096) {
   const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
   const wanted = Math.floor(viewZoom + Math.log2(dpr)) + 1;
-  const zoom = pickFetchZoom(bounds, INSTA_MAX_SOURCE_EDGE, Math.min(NATIVE_TILE_ZOOM, wanted));
+  const cap = Math.min(INSTA_MAX_SOURCE_EDGE, maxEdge);
+  const zoom = pickFetchZoom(bounds, cap, Math.min(NATIVE_TILE_ZOOM, wanted));
   const [w, h] = worldSize(bounds, zoom).map((v) => Math.max(1, Math.round(v)));
-  const ai = Math.max(w, h) < INSTA_AI_BELOW;
+  const ai = Math.max(w, h) < INSTA_AI_BELOW && Math.max(w, h) * 2 <= maxEdge;
   const factor = ai ? 2 : 1;
   return { zoom, srcW: w, srcH: h, ai, factor, outW: w * factor, outH: h * factor };
 }
@@ -127,8 +128,8 @@ export function formatCoords(lng, lat) {
  * @param {number|string} p.year Jahr für die Quellenangabe
  * @param {number} p.viewZoom     aktueller Kartenzoom (bestimmt die Kachelstufe)
  */
-export async function createInstaImage({ bounds, timestamp, name, subtitle, year, viewZoom, onStatus, onProgress, signal }) {
-  const plan = planInsta(bounds, viewZoom);
+export async function createInstaImage({ bounds, timestamp, name, subtitle, year, viewZoom, maxEdge, onStatus, onProgress, signal }) {
+  const plan = planInsta(bounds, viewZoom, maxEdge);
   onStatus?.(`Setze Kacheln zusammen (Stufe ${plan.zoom}, ${plan.srcW} × ${plan.srcH} px) …`);
   const src = await captureSource({
     bounds, fetchZoom: plan.zoom, timestamp, signal,
