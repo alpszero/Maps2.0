@@ -72,6 +72,22 @@ export class FrameSelector {
     this._emit();
   }
 
+  /**
+   * Rahmen relativ zum sichtbaren Kartenausschnitt setzen: `fraction` der
+   * kleineren Kante (bzw. so, dass er im gewählten Seitenverhältnis hineinpasst),
+   * mittig.
+   */
+  fitView(fraction = 0.8) {
+    const el = this.map.getContainer();
+    const a = this.aspect || 1;
+    const maxW = el.clientWidth * fraction, maxH = el.clientHeight * fraction;
+    let w = Math.min(maxW, maxH * a);
+    let h = w / a;
+    const cx = el.clientWidth / 2, cy = el.clientHeight / 2;
+    this._setFromRect({ x: cx - w / 2, y: cy - h / 2, w, h });
+    this.render();
+  }
+
   getBounds() { return this.bounds ? { ...this.bounds } : null; }
 
   /** Mitte des Rahmens als {lng, lat}. */
