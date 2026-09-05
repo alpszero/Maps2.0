@@ -7,14 +7,12 @@ wandert man durch die Jahrzehnte: dieselbe Stelle, Jahrgang für Jahrgang, als
 Luftbild von oben. Die Bilder blenden ineinander über, so dass sichtbar wird, was
 sich verändert hat. Gross oben steht das Jahr, in dem tatsächlich geflogen wurde.
 
-Statt des eigenen Standorts lässt sich über die Suche jede Adresse oder jeder Ort
-in der Schweiz ansteuern. Über den Ebenen-Knopf lassen sich Fachdaten des
-Bundes-Geoportals mit regelbarer Deckkraft über das Luftbild legen.
+Dazu kommen vier Dinge, nicht mehr:
 
-Mit dem Vergrössern-Knopf wird ein Ausschnitt der Luftbilder direkt im Browser
-2- oder 4-fach hochskaliert, wahlweise mit einem neuronalen Netz (ESRGAN) oder
-klassischen Filtern. Das Ergebnis lässt sich im Vorher/Nachher-Vergleich prüfen,
-als PNG herunterladen oder in einem neuen Tab öffnen.
+* **Suche**: jede Adresse oder jeder Ort in der Schweiz.
+* **Ortsnamen und Gelände**: über den Ebenen-Knopf einblendbar.
+* **Insta-Bild**: Ausschnitt wählen, ein Knopf, fertiges Bild mit Ortsangaben.
+* **Orte von oben**: der Würfel fliegt zu einem bekannten Ort der Schweiz.
 
 ## Woher die Daten kommen
 
@@ -27,15 +25,17 @@ Alles stammt von swisstopo über die offenen Dienste des Bundes-Geoportals
 | Jahrgänge      | `api3.geo.admin.ch/rest/services/api/MapServer/layersConfig` → `timestamps` der Ebene   |
 | Aufnahmejahr   | Identify auf `ch.swisstopo.swissimage-product.metadata` für die Bildmitte, je Jahrgang    |
 | Ortssuche      | `api3.geo.admin.ch/rest/services/api/SearchServer?type=locations`                        |
-| Zusatzebenen   | Verzeichnis `layersConfig`, gefiltert nach vier Themen; Darstellung per WMTS, WMS, GeoJSON |
+| Ortsnamen      | WMS `ch.swisstopo.swissnames3d`                                                          |
+| Gelände        | WMTS `ch.swisstopo.swissalti3d-reliefschattierung` (Fallback WMS)                        |
+| Ortsangaben    | Identify (Rechteck) auf `ch.swisstopo.swissnames3d`, Identify (Punkt) auf `ch.swisstopo.swissboundaries3d-gemeinde-flaeche.fill` |
 
 Abgedeckt ist nur die Schweiz, und nicht jeder Jahrgang deckt jeden Ort ab.
 Wo nicht geflogen wurde, bleibt die Fläche leer. © swisstopo
 
 ## Betrieb
 
-Reine statische Web-App ohne Build-Schritt. MapLibre GL JS liegt unter `vendor/`,
-es wird nichts von einem CDN nachgeladen.
+Reine statische Web-App ohne Build-Schritt. MapLibre GL JS, TensorFlow.js und die
+Modellgewichte liegen unter `vendor/`, es wird nichts von einem CDN nachgeladen.
 
 Lokal starten (ES-Module brauchen einen HTTP-Server, `file://` genügt nicht):
 
@@ -50,108 +50,87 @@ Veröffentlichen: Der Workflow `.github/workflows/pages.yml` stellt den Inhalt d
 Repositories bei jedem Push auf `main` über GitHub Pages bereit (in den
 Repository-Einstellungen unter *Pages* die Quelle *GitHub Actions* wählen).
 
-### Animation
-
-Ausschnitt mit demselben Rahmen wählen, Jahrgänge von/bis, Grösse (360 bis
-1080 px), Standzeit und Überblendung. Die App lädt jeden Jahrgang für den
-Ausschnitt (`js/animate.js`), überspringt Jahrgänge ohne Bild (fehlende Kacheln
-oder überwiegend weisse bzw. schwarze Flächen) sowie Jahrgänge, deren Bild sich
-praktisch nicht vom vorherigen unterscheidet (Mosaik nicht neu beflogen; mittlere
-Helligkeitsabweichung unter 3.5 von 255), blendet mit
-Ease-in-out über und schreibt die Jahreszahl ins Bild. Ausgabe als GIF (gifenc,
-256 Farben je Bild) oder als Video über MediaRecorder: MP4 in Safari, WebM in
-Chrome und Firefox. Die Videoaufnahme läuft in Echtzeit, der Tab muss dabei offen
-bleiben.
-
-### Quiz «Wo ist das?»
-
-Modus Gemeinden: Zufallspunkt in der Schweiz, Identify auf
-`ch.swisstopo.swissboundaries3d-gemeinde-flaeche.fill` liefert Name und Umriss;
-die Karte springt ohne Kameraflug direkt auf den Umriss (maximal Stufe 15), damit
-die Lage in der Schweiz nicht verraten wird. Während der Runde ist Herauszoomen
-und Wegwandern gesperrt (minZoom und maxBounds), nach der Antwort ist die Karte
-wieder frei. Drei weitere Gemeinden dienen als Ablenker, eine davon aus der Nähe.
-Modus Seen: eingebaute Liste der grössten Schweizer Seen. Während des Quiz sind
-Suchleiste, Jahresanzeige, Regler und Seitenknöpfe ausgeblendet; die Bedienung
-ist eine kompakte Leiste über der Karte.
-
 ## Aufbau
 
 ```
 index.html            Oberfläche
 css/style.css         Gestaltung (mobil zuerst, dunkles Design)
-js/app.js             Einstieg: Karte, Regler, Standort, Panels
+js/app.js             Einstieg: Karte, Regler, Standort, Suche, Ebenen, Orte, Panels
 js/timeline.js        Jahrgänge: Überblendung ohne Flackern, Vorladen der Nachbarn
-js/overlays.js        Zusatzebenen aus dem Geoportal-Verzeichnis
 js/search.js          Ortssuche mit Vorschlägen
-js/upscale.js         Hochskalieren: Kacheln laden, KI- und Filter-Methoden, Export
-js/upscale-ui.js      Hochskalieren: Panel, Vergleich, Export
-js/frame.js           Geografisch verankerter, ziehbarer Rahmen
-js/animate.js         Animation: Jahrgänge laden, überblenden, GIF/Video
-js/animate-ui.js      Animation: Panel
-js/quiz.js            Quiz: Runden aus Geoportal (Gemeinden) und Seenliste
-js/quiz-ui.js         Quiz: Panel
+js/layers.js          Einblendbare Ebenen (Ortsnamen, Gelände)
+js/frame.js           Geografisch verankerter, ziehbarer Rahmen mit Seitenverhältnis
+js/enhance.js         Kacheln zusammensetzen, Real-ESRGAN kompakt, Veredelung, Export
+js/insta.js           Insta-Bild: Ortsbestimmung, Ablauf, Beschriftung
+js/insta-ui.js        Insta-Bild: Bedienleiste und Ergebnis
+js/places.js          Bekannte Orte der Schweiz (Liste) und Zufallswahl
 js/geoadmin.js        Zugriff auf die geo.admin.ch-Dienste
-js/config.js          Dienste, Themen-Filter, Verhalten
+js/config.js          Dienste, Ebenen, Verhalten
 vendor/maplibre-gl/   MapLibre GL JS (BSD-3-Lizenz)
-vendor/tfjs/          TensorFlow.js (Apache-2.0), wird erst beim Hochskalieren geladen
-vendor/esrgan/        ESRGAN-Modelle aus UpscalerJS (MIT), 2× und 4×, schlank und mittel
-vendor/pica/          pica, Lanczos-Skalierung (MIT)
-vendor/gifenc/        gifenc, GIF-Encoder (MIT)
-vendor/realesrgan/    Real-ESRGAN-Gewichte (BSD-3), kompakt und x4plus
+vendor/tfjs/          TensorFlow.js (Apache-2.0), wird erst fürs Insta-Bild geladen
+vendor/realesrgan/    Real-ESRGAN-Gewichte «realesr-general-x4v3» (BSD-3), 9.7 MB
 ```
 
-### Hochskalieren
+### Suche
 
-* **Ausschnitt**: Ein Rahmen liegt über der Karte und ist geografisch verankert
-  (`js/frame.js`). Eckgriffe ändern die Grösse, Ziehen in der Fläche verschiebt ihn,
-  die Karte lässt sich daneben weiter bewegen; «Zurücksetzen» legt ein Quadrat von
-  höchstens 160 m in die Mitte. Die Kacheln werden immer auf der höchsten Stufe der
-  SWISSIMAGE in EPSG:3857 (Stufe 20, rund 10 cm) geladen und zusammengesetzt.
-  Angezeigt werden Pixelgrösse, Bodenauflösung, Metermasse und die Druckgrösse bei
-  300 dpi. Die grösste mögliche Kante wird je Gerät gemessen (Leinwandgrenze des
-  Browsers, 4096 bis 16384 px); Faktoren, die das sprengen, sind deaktiviert. 2× ist
-  die Vorgabe. «Direkt als JPEG» setzt den Ausschnitt in voller Auflösung zusammen
-  und speichert ihn sofort, ohne Netz und ohne Vorschau.
-* **Faktor 1×** setzt nur zusammen (volle Auflösung, ohne Netz), wahlweise mit
-  Veredelung.
-* **Tempo**: Rechen-Backend WebGPU, wo verfügbar (Chrome, Safari 26, Android),
-  sonst WebGL; grössere Rechenkacheln auf Desktop-Geräten; der Bildschirm wird
-  während der Berechnung wach gehalten (Wake Lock).
-* **Foto-Veredelung** (Vorgabe ein): streckt die Tonwerte (0.5 bis 99.5 Prozent der
-  Helligkeit, aus dem ganzen Bild bestimmt, damit alle Kacheln gleich behandelt
-  werden), kräftigt die Farben um rund ein Fünftel, legt ein mildes Kontrast-S an
-  und schärft mit einer Unschärfemaske sanft nach. Läuft kachelweise auf der
-  Grafikeinheit.
-* **Zoom-Knöpfe** links unten: Vergrössern, Verkleinern und «1:1», der Zoom, bei
-  dem ein Kachelpixel einem Gerätepixel entspricht (Stufe 19 plus log2 der
-  Pixeldichte, gedeckelt bei 20).
-* **Bildstand**: «Aktuellster Stand» (Zeitstempel `current` des WMTS, also die
-  neusten Aufnahmen) oder ein beliebiger Jahrgang.
-* **Methoden**: Real-ESRGAN x4plus (das grosse Modell «RealESRGAN_x4plus», RRDBNet
-  mit 16.7 Mio. Parametern, 34 MB einmaliger Download, klarste Kanten und
-  Markierungen), Real-ESRGAN kompakt (Modell «realesr-general-x4v3», 33
-  Faltungsschichten, mit regelbarer Glättung), ESRGAN gründlich und ESRGAN schnell,
-  alle 2× und 4×, gerechnet mit TensorFlow.js auf der Grafikeinheit des Geräts,
-  patchweise mit Überlappung, damit keine Nähte entstehen. Dazu Lanczos mit
-  Nachschärfung (pica), bikubisch (Browser) und Pixelwiederholung als Referenz.
-  Die Real-ESRGAN-Modelle rechnen fest 4-fach; 2× entsteht durch
-  Lanczos-Verkleinerung des 4-fach-Ergebnisses.
-* **Glättung** (nur Real-ESRGAN kompakt): mischt die Gewichte des normalen und des
-  rauschunterdrückenden Modells linear, entsprechend `denoise_strength` im
-  Original. 0 % belässt Körnung, 100 % glättet am stärksten; Vorgabe 50 %.
-  Das Netz rechnet fest 4-fach; 2× entsteht durch sauberes Verkleinern (Lanczos).
-* **Ergebnis**: Vorher/Nachher-Schieber, 1:1-Ansicht, Download als PNG oder JPEG
-  (Qualität 93 %), Öffnen im neuen Tab. Es verlässt kein Bild das Gerät.
+Treffer erscheinen als Liste unter dem Suchfeld; Antippen oder Enter fliegt zur
+Stelle, die Zoomstufe richtet sich nach der Art des Treffers (Adresse, Ort, PLZ,
+Gemeinde, Kanton). Die Treffer sind echte Schaltflächen und reagieren auf `click`:
+Auf iOS werden Tipps auf nicht interaktive Elemente bei offener Tastatur oft nur
+zum Schliessen der Tastatur verwendet, so dass scheinbar nichts passiert. Der
+automatische Sprung zum eigenen Standort beim Start unterbleibt, wenn man vorher
+schon gesucht, gewürfelt oder die Karte gezogen hat.
 
-Zu den Modellen: Es gibt derzeit kein fertiges, im Browser lauffähiges
-Super-Resolution-Modell, das speziell auf Luftbilder trainiert wurde. Real-ESRGAN
-wurde mit `vendor/realesrgan/convert.py` ohne PyTorch aus den Original-Gewichten
-umgewandelt und in TensorFlow.js nachgebaut (`js/upscale.js`); die Vorwärtsrechnung
-ist gegen eine NumPy-Referenz geprüft. Alle Modelle sind auf allgemeine Fotografien
-trainiert. Sie schärfen Kanten und Texturen von Dächern, Strassen und Vegetation
-gut, können aber Details erfinden, die in der Aufnahme nicht existieren. Für
-messbare Aussagen bleibt die Lanczos-Variante die ehrlichere Wahl.
+### Ortsnamen und Gelände
+
+Zwei Schalter. Ortsnamen kommen als WMS-Beschriftungsebene (swissNAMES3D), das
+Gelände als Reliefschattierung aus swissALTI3D mit 45 % Deckkraft über dem
+Luftbild. Die Namen liegen immer über dem Relief. Liefert der WMTS-Dienst für eine
+Ebene keine Kachel (Probe-Anfrage unter der Bildmitte), wird auf den WMS-Dienst
+ausgewichen.
+
+### Insta-Bild
+
+Ziel: mit möglichst wenigen Schritten zu einem Bild, das man direkt posten kann.
+
+1. **Rahmen** (`js/frame.js`): quadratisch (1:1) oder hochkant (4:5), geografisch
+   verankert, Eckgriffe ändern die Grösse, die Karte lässt sich darunter bewegen.
+   Der Jahrgang ist der gerade eingestellte.
+2. **Ortsname**: wird aus swissNAMES3D für den Ausschnitt ermittelt (Orte und
+   Quartiere vor Flurnamen, Gebäude zuletzt), Gemeinde und Kanton aus
+   swissBOUNDARIES3D; steht der Rahmen auf einem Ort aus der eingebauten Liste, gilt
+   dessen Name. Das Feld lässt sich überschreiben.
+3. **Bild erstellen** (`js/insta.js`, `js/enhance.js`): Die Kacheln werden auf der
+   höchsten Stufe geladen, bei der die längste Kante höchstens 1024 Pixel misst
+   (bis Stufe 20, rund 10 cm). Dann rechnet das kompakte Real-ESRGAN
+   («realesr-general-x4v3», 33 Faltungsschichten) 2-fach mit Glättung 50 %:
+   Das Netz arbeitet fest 4-fach, das 2-fach-Ergebnis entsteht durch Mittelung;
+   die Glättung mischt die Gewichte des normalen und des rauschunterdrückenden
+   Modells linear, wie `denoise_strength` im Original. Anschliessend die
+   Foto-Veredelung: Tonwerte sanft strecken (aus dem ganzen Bild bestimmt),
+   Farben um rund ein Fünftel kräftigen, mildes Kontrast-S, Unschärfemaske.
+   Zum Schluss die Beschriftung in Weiss über einem dunklen Verlauf: Ortsname gross
+   in Grossbuchstaben mit Sperrung, dünne Linie, Gemeinde und Kanton, Koordinaten
+   (WGS84, vier Nachkommastellen), rechts klein «© swisstopo · Luftbild Jahr».
+4. **Ergebnis**: JPEG (Qualität 93 %) herunterladen oder, wo der Browser Dateien
+   teilen kann (iOS, Android), direkt in die Teilen-Übersicht geben. Ausgabe bis
+   2048 Pixel Kante. Es verlässt kein Bild das Gerät.
+
+Tempo: Rechen-Backend WebGPU, wo verfügbar, sonst WebGL; grössere Rechenkacheln
+auf Desktop-Geräten; der Bildschirm wird während der Berechnung wach gehalten.
+Das Modell wurde mit `vendor/realesrgan/convert.py` ohne PyTorch aus den
+Original-Gewichten umgewandelt und in TensorFlow.js nachgebaut; die
+Vorwärtsrechnung ist gegen eine NumPy-Referenz geprüft. Das Modell ist auf
+allgemeine Fotografien trainiert; es schärft Kanten und Texturen, kann aber
+Details erfinden, die in der Aufnahme nicht existieren.
+
+### Orte von oben
+
+`js/places.js` enthält rund 80 bekannte Orte mit Lage und passender Zoomstufe
+(Matterhorn, Rheinfall, Kapellbrücke, Landwasserviadukt, Kloster Müstair …). Der
+Würfel fliegt zu einem zufälligen Ort und zeigt Namen und Zusatz in einer kleinen
+Karte; «Nächster» würfelt weiter. Das Insta-Bild übernimmt den Namen, wenn der
+Rahmen auf einem dieser Orte steht.
 
 ### Wie der Jahrgangswechsel flüssig bleibt
 
@@ -161,9 +140,8 @@ messbare Aussagen bleibt die Lanczos-Variante die ehrlichere Wahl.
   wird er ohne Animation ausgeblendet. So gibt es weder Helligkeitseinbruch noch
   leere Flächen während des Wechsels.
 * Die Jahrgänge im Umkreis von drei Schritten bleiben mit Deckkraft 0 aktiv, damit
-  ihre Kacheln bereits geladen sind (z. B. 2013 ↔ 2014 hin und zurück). Das
-  Vorladen setzt erst ein, wenn die Karte ruht und der sichtbare Jahrgang geladen
-  ist, damit dessen Kacheln in der Warteschlange vorne stehen.
+  ihre Kacheln bereits geladen sind. Das Vorladen setzt erst ein, wenn die Karte
+  ruht und der sichtbare Jahrgang geladen ist.
 * Das Aufnahmejahr wird für die Bildmitte je Jahrgang abgefragt, zwischengespeichert
   und für die Nachbar-Jahrgänge vorab geholt.
 
@@ -176,7 +154,3 @@ messbare Aussagen bleibt die Lanczos-Variante die ehrlichere Wahl.
   das erste Attribut mit Flug-/Jahres-/Datumsbezug ausgewertet. Akzeptiert der
   Dienst für die Ebene keinen `timeInstant`, wird ohne Zeitfilter abgefragt und
   der passende Jahrgang selbst herausgesucht.
-* Zusatzebenen werden per WMTS in EPSG:3857 geladen. Liefert der WMTS-Dienst für
-  eine Ebene keine Kachel (Probe-Anfrage unter der Bildmitte), wird auf den
-  WMS-Dienst ausgewichen. Sammel-Ebenen werden in ihre Unter-Ebenen aufgelöst,
-  GeoJSON-Ebenen mit einer einfachen Standardsignatur gezeichnet.

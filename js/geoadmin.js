@@ -186,6 +186,17 @@ export async function identifyLayer(lng, lat, layer, { returnGeometry = false, s
   return data?.results || [];
 }
 
+/** Identify mit einem Rechteck (WGS84: west, süd, ost, nord) auf eine Ebene. */
+export async function identifyEnvelope(bounds, layer, { returnGeometry = true, signal } = {}) {
+  const geom = [bounds.west, bounds.south, bounds.east, bounds.north].map((v) => v.toFixed(6)).join(',');
+  const url = `${API_BASE}/all/MapServer/identify`
+    + `?geometryType=esriGeometryEnvelope&geometry=${geom}`
+    + `&sr=4326&tolerance=0&returnGeometry=${returnGeometry}&geometryFormat=geojson&lang=de`
+    + `&layers=all:${layer}`;
+  const data = await fetchJson(url, { signal });
+  return data?.results || [];
+}
+
 // ---------------------------------------------------------------------------
 // Aufnahmejahr (Metadaten der SWISSIMAGE Zeitreise)
 

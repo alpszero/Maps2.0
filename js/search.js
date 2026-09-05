@@ -1,4 +1,8 @@
 // Ortssuche über das Adress- und Ortsverzeichnis des Bundes.
+//
+// Die Treffer sind echte Schaltflächen und reagieren auf «click»: Auf iOS werden
+// Tipps auf nicht interaktive Elemente bei offener Tastatur oft nur zum
+// Schliessen der Tastatur verwendet, so dass «nichts passiert».
 
 import { searchLocations, zoomForOrigin } from './geoadmin.js';
 
@@ -9,6 +13,8 @@ export function setupSearch({ input, results, onSelect }) {
   let cursor = -1;
 
   function close() {
+    clearTimeout(timer);
+    controller?.abort();
     results.hidden = true;
     results.innerHTML = '';
     items = [];
@@ -26,19 +32,26 @@ export function setupSearch({ input, results, onSelect }) {
     }
     items.forEach((it, i) => {
       const li = document.createElement('li');
-      li.setAttribute('role', 'option');
-      li.dataset.index = String(i);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'search-hit';
+      b.setAttribute('role', 'option');
+      b.dataset.index = String(i);
       const name = document.createElement('span');
       name.className = 'search-label';
       name.textContent = it.label;
-      li.appendChild(name);
+      b.appendChild(name);
       if (it.detail && it.detail.toLowerCase() !== it.label.toLowerCase()) {
         const d = document.createElement('span');
         d.className = 'search-detail';
         d.textContent = it.detail;
-        li.appendChild(d);
+        b.appendChild(d);
       }
-      li.addEventListener('pointerdown', (ev) => { ev.preventDefault(); choose(i); });
+      // Fokus im Eingabefeld lassen (kein Zucken der Tastatur), Auswahl per click.
+      b.addEventListener('pointerdown', (ev) => ev.preventDefault());
+      b.addEventListener('mousedown', (ev) => ev.preventDefault());
+      b.addEventListener('click', () => choose(i));
+      li.appendChild(b);
       results.appendChild(li);
     });
     results.hidden = false;
@@ -48,15 +61,15 @@ export function setupSearch({ input, results, onSelect }) {
   function choose(i) {
     const it = items[i];
     if (!it) return;
-    input.value = it.label;
     close();
+    input.value = it.label;
     input.blur();
     onSelect({ ...it, zoom: zoomForOrigin(it.origin) });
   }
 
   async function run() {
     const q = input.value.trim();
-    if (controller) controller.abort();
+    controller?.abort();
     if (q.length < 2) { close(); return; }
     controller = new AbortController();
     try {

@@ -11,8 +11,3 @@ manifest.json Schichtenfolge und Offsets; beide Dateien haben dasselbe Layout,
 Umgewandelt mit convert.py (ohne PyTorch): Faltungsgewichte als [kh, kw, in, out],
 Ausgangskanäle der letzten Faltung in die Reihenfolge von tf.depthToSpace (NHWC)
 gebracht. Eingabe und Ausgabe im Bereich 0–1.
-
-x4plus.bin / x4plus.json
-  RealESRGAN_x4plus (RRDBNet, 64 Merkmale, 23 RRDB-Blöcke, 16.7 Mio. Parameter) aus
-  Release v0.1.0, als Float16 gespeichert (33 MB) und im Browser zu Float32 entpackt.
-  Umgewandelt mit convert_rrdb.py; Tensoren nach Namen mit Offset im Manifest.

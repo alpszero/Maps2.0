@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no, interactive-widget=resizes-content">
   <title>Zeitreise Luftbilder</title>
   <meta name="description" content="Wie sah ein Ort in der Schweiz früher aus? Luftbilder von swisstopo, Jahrgang für Jahrgang.">
   <meta name="theme-color" content="#0c1117">
@@ -21,7 +21,7 @@
   <header class="topbar">
     <div class="search" role="combobox" aria-haspopup="listbox" aria-owns="search-results" aria-expanded="false">
       <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16.5 16.5 21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      <input id="search-input" type="search" placeholder="Adresse oder Ort in der Schweiz" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Adresse oder Ort suchen" aria-autocomplete="list" aria-controls="search-results">
+      <input id="search-input" type="search" placeholder="Adresse oder Ort in der Schweiz" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search" aria-label="Adresse oder Ort suchen" aria-autocomplete="list" aria-controls="search-results">
       <ul id="search-results" role="listbox" hidden></ul>
     </div>
   </header>
@@ -35,32 +35,19 @@
     <button id="btn-locate" class="fab" type="button" aria-label="Eigener Standort" title="Eigener Standort">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
     </button>
-    <button id="btn-layers" class="fab" type="button" aria-label="Zusatzebenen" title="Zusatzebenen" aria-expanded="false" aria-controls="layers-panel">
+    <button id="btn-layers" class="fab" type="button" aria-label="Ortsnamen und Gelände einblenden" title="Ortsnamen und Gelände" aria-expanded="false" aria-controls="layers-panel">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
       <span id="layers-badge" class="badge" hidden></span>
     </button>
-    <button id="btn-upscale" class="fab" type="button" aria-label="Hochskalieren mit KI" title="Hochskalieren mit KI" aria-expanded="false" aria-controls="upscale-panel">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 15v5h-5M4 4l6 6M20 20l-6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 3.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z" fill="currentColor"/></svg>
+    <button id="btn-insta" class="fab fab-accent" type="button" aria-label="Insta-Bild erstellen" title="Insta-Bild erstellen" aria-expanded="false" aria-controls="insta-panel">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.3" cy="6.7" r="1.2" fill="currentColor"/></svg>
     </button>
-    <button id="btn-animate" class="fab" type="button" aria-label="Animation durch die Jahrgänge" title="Animation (GIF oder Video)" aria-expanded="false" aria-controls="animate-panel">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 5v14M17 5v14M3 9h4M3 15h4M17 9h4M17 15h4" stroke="currentColor" stroke-width="2"/><path d="M11 10v4l3-2z" fill="currentColor"/></svg>
-    </button>
-    <button id="btn-quiz" class="fab" type="button" aria-label="Quiz: Wo ist das?" title="Quiz: Wo ist das?" aria-expanded="false" aria-controls="quiz-panel">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1.9-1.1 1.8v.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.2" fill="currentColor"/></svg>
+    <button id="btn-random" class="fab" type="button" aria-label="Bekannter Ort von oben, zufällig" title="Bekannte Orte von oben">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="8.5" cy="8.5" r="1.6" fill="currentColor"/><circle cx="15.5" cy="8.5" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="8.5" cy="15.5" r="1.6" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.6" fill="currentColor"/></svg>
     </button>
     <button id="btn-info" class="fab" type="button" aria-label="Über die Daten" title="Über die Daten" aria-expanded="false" aria-controls="info-panel">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 10.5v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="7.5" r="1.25" fill="currentColor"/></svg>
     </button>
-  </div>
-
-  <div class="zoomctl" role="group" aria-label="Zoom">
-    <button id="btn-zoom-in" class="zoombtn" type="button" aria-label="Vergrössern" title="Vergrössern">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15.5 15.5 21 21M8 10.5h5M10.5 8v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-    </button>
-    <button id="btn-zoom-out" class="zoombtn" type="button" aria-label="Verkleinern" title="Verkleinern">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15.5 15.5 21 21M8 10.5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-    </button>
-    <button id="btn-zoom-native" class="zoombtn zoombtn-text" type="button" aria-label="Originalgrösse, ein Kachelpixel je Bildschirmpixel" title="1:1 – keine digitale Vergrösserung">1:1</button>
   </div>
 
   <footer class="bottombar">
@@ -83,13 +70,69 @@
     <div id="attribution" class="attribution">© swisstopo</div>
   </footer>
 
-  <section id="layers-panel" class="panel" hidden aria-label="Zusatzebenen">
+  <section id="place-card" class="place-card" hidden aria-live="polite">
+    <div class="place-text">
+      <div id="place-name" class="place-name"></div>
+      <div id="place-sub" class="place-sub"></div>
+    </div>
+    <button id="place-next" class="mini-btn" type="button" aria-label="Nächster Ort">Nächster</button>
+    <button class="panel-close" type="button" aria-label="Schliessen">×</button>
+  </section>
+
+  <section id="layers-panel" class="panel panel-mini" hidden aria-label="Ebenen">
     <div class="panel-head">
-      <h2>Zusatzebenen</h2>
+      <h2>Einblenden</h2>
       <button class="panel-close" type="button" aria-label="Schliessen">×</button>
     </div>
-    <p class="panel-lead">Fachdaten des Bundes-Geoportals über dem Luftbild. Die Liste wird aus dem Verzeichnis von geo.admin.ch gelesen.</p>
-    <div id="themes"></div>
+    <div id="layers-list" class="switches"></div>
+  </section>
+
+  <div id="frame" class="frame" hidden aria-hidden="true">
+    <div class="frame-box" data-handle="move">
+      <div class="frame-handle" data-handle="nw"></div>
+      <div class="frame-handle" data-handle="ne"></div>
+      <div class="frame-handle" data-handle="sw"></div>
+      <div class="frame-handle" data-handle="se"></div>
+    </div>
+  </div>
+
+  <section id="insta-panel" class="panel insta-panel is-bar" hidden aria-label="Insta-Bild">
+    <div id="in-step1" class="in-bar">
+      <div class="in-row">
+        <input id="in-name" class="in-name" type="text" placeholder="Ortsname im Bild" autocomplete="off" aria-label="Ortsname im Bild">
+        <div class="segmented" role="group" aria-label="Format">
+          <button id="in-aspect-1" class="seg is-active" type="button" title="Quadrat">1:1</button>
+          <button id="in-aspect-45" class="seg" type="button" title="Hochformat">4:5</button>
+        </div>
+        <button class="panel-close" type="button" aria-label="Schliessen">×</button>
+      </div>
+      <div class="in-row">
+        <span id="in-info" class="in-info">Rahmen ziehen, Karte darunter bewegen</span>
+        <button id="in-run" class="btn-primary" type="button">Bild erstellen</button>
+      </div>
+    </div>
+    <div id="in-step2" class="in-bar" hidden>
+      <div class="up-progress"><div id="in-progress-bar" class="up-progress-bar"></div></div>
+      <div class="in-row">
+        <span id="in-status" class="in-info" aria-live="polite"></span>
+        <button id="in-cancel" class="btn-secondary" type="button">Abbrechen</button>
+      </div>
+    </div>
+    <div id="in-result" class="in-result" hidden>
+      <div class="panel-head">
+        <h2>Insta-Bild</h2>
+        <button class="panel-close" type="button" aria-label="Schliessen">×</button>
+      </div>
+      <div class="in-body">
+        <div class="in-preview"><img id="in-preview" alt="Fertiges Bild"></div>
+        <div id="in-meta" class="up-meta"></div>
+        <div class="up-row">
+          <button id="in-download" class="btn-primary" type="button">JPEG herunterladen</button>
+          <button id="in-share" class="btn-secondary" type="button" hidden>Teilen</button>
+          <button id="in-again" class="btn-secondary" type="button">Neuer Ausschnitt</button>
+        </div>
+      </div>
+    </div>
   </section>
 
   <section id="info-panel" class="panel" hidden aria-label="Über die Daten">
@@ -103,187 +146,21 @@
       <p>Alles stammt von swisstopo, dem Bundesamt für Landestopografie, über die offenen Dienste des Bundes-Geoportals (<a href="https://www.geo.admin.ch/" target="_blank" rel="noopener">geo.admin.ch</a>):</p>
       <ul>
         <li><strong>Luftbilder:</strong> SWISSIMAGE Zeitreise – die Sammlung der Orthofoto-Mosaike der Schweiz. Historische Jahrgänge sind schwarzweiss, neuere in Farbe.</li>
-        <li><strong>Aufnahmejahr:</strong> aus den Metadaten derselben Sammlung. Die Angabe gilt für die Kachel unter der Bildmitte – der Flug fand oft ein Jahr vor der Veröffentlichung des Jahrgangs statt.</li>
+        <li><strong>Aufnahmejahr:</strong> aus den Metadaten derselben Sammlung, für die Kachel unter der Bildmitte.</li>
         <li><strong>Ortssuche:</strong> Adress- und Ortsverzeichnis des Bundes.</li>
+        <li><strong>Ortsnamen und Gelände:</strong> swissNAMES3D und die Reliefschattierung aus swissALTI3D, einblendbar über den Ebenen-Knopf.</li>
       </ul>
-      <p>Abgedeckt ist nur die Schweiz, und nicht jeder Jahrgang deckt jeden Ort ab – wo nicht geflogen wurde, bleibt die Fläche leer.</p>
-      <h3>Zusatzebenen</h3>
-      <p>Über den Ebenen-Knopf lassen sich Fachdaten über das Luftbild legen, mit regelbarer Deckkraft: Wasser, Laser &amp; Gelände, Radar &amp; Wetter, Telekommunikation. Die Liste wird aus dem Verzeichnis des Geoportals gelesen; neue oder umbenannte Ebenen erscheinen von selbst.</p>
-      <h3>Hochskalieren</h3>
-      <p>Über den Vergrössern-Knopf lässt sich ein Ausschnitt in wählbarer Grösse (Haus bis Quartier) in voller Auflösung laden und im Browser 2- oder 4-fach hochrechnen: mit Real-ESRGAN (gross oder kompakt), ESRGAN oder klassischen Filtern. Die Foto-Veredelung streckt Tonwerte, kräftigt Farben und schärft sanft nach. Alles rechnet das eigene Gerät, es wird kein Bild hochgeladen. Die KI-Modelle sind auf allgemeine Fotografien trainiert; sie schärfen Kanten und Texturen, können aber Details erfinden, die so nicht existieren.</p>
-      <p>Die Lupen-Knöpfe links unten zoomen die Karte; «1:1» stellt die Luftbilder ohne digitale Vergrösserung dar, ein Kachelpixel je Bildschirmpixel.</p>
-      <h3>Animation</h3>
-      <p>Ausschnitt aufziehen, Jahrgänge wählen: Die App lädt jeden Jahrgang für diesen Ausschnitt und blendet weich von Jahr zu Jahr über, mit Jahreszahl im Bild. Ausgabe als GIF oder als Video (MP4 in Safari, WebM in Chrome und Firefox).</p>
-      <h3>Quiz</h3>
-      <p>«Wo ist das?» zeigt einen zufälligen Ausschnitt in Gemeindegrösse und vier Namen. Die Gemeinden kommen aus dem Geoportal (swissBOUNDARIES3D), die Seen aus einer Liste der grössten Schweizer Seen.</p>
+      <h3>Insta-Bild</h3>
+      <p>Rahmen aufziehen (1:1 oder 4:5), Ortsname prüfen, «Bild erstellen». Die App lädt den Ausschnitt in voller Auflösung, schärft ihn mit dem kompakten Real-ESRGAN 2-fach (Glättung 50 %), veredelt Farben und Schärfe und montiert Ortsname, Gemeinde und Koordinaten weiss ins Bild. Alles rechnet das eigene Gerät; es wird kein Bild hochgeladen. Danach herunterladen oder direkt teilen.</p>
+      <h3>Orte von oben</h3>
+      <p>Der Würfel fliegt zu einem bekannten Ort der Schweiz: Matterhorn, Rheinfall, Kapellbrücke, Landwasserviadukt und viele mehr.</p>
       <h3>Bedienung</h3>
       <ul>
         <li>Regler ziehen oder ◀ ▶ tippen; Pfeiltasten und Leertaste funktionieren auch.</li>
         <li>▶ spielt alle Jahrgänge nacheinander ab.</li>
         <li>Suche oben: jede Adresse oder jeder Ort in der Schweiz.</li>
       </ul>
-      <p class="fineprint">Luftbilder und Fachdaten © swisstopo und Bundesämter, Nutzung gemäss <a href="https://www.geo.admin.ch/de/allgemeine-nutzungsbedingungen-bgdi" target="_blank" rel="noopener">Nutzungsbedingungen BGDI</a>. Karte: MapLibre GL JS.</p>
-    </div>
-  </section>
-
-  <div id="frame" class="frame" hidden aria-hidden="true">
-    <div class="frame-box" data-handle="move">
-      <div class="frame-handle" data-handle="nw"></div>
-      <div class="frame-handle" data-handle="ne"></div>
-      <div class="frame-handle" data-handle="sw"></div>
-      <div class="frame-handle" data-handle="se"></div>
-    </div>
-  </div>
-
-  <section id="animate-panel" class="panel" hidden aria-label="Animation">
-    <div class="panel-head">
-      <h2>Animation</h2>
-      <button class="panel-close" type="button" aria-label="Schliessen">×</button>
-    </div>
-    <div id="an-step1" class="up-step">
-      <div id="an-info" class="up-info">–</div>
-      <div class="up-row">
-        <button id="an-next" class="btn-primary" type="button">Ausschnitt übernehmen</button>
-        <button id="an-reset" class="btn-secondary" type="button">Rahmen zurücksetzen</button>
-      </div>
-    </div>
-    <div id="an-step2" class="up-step up-body" hidden>
-      <button id="an-back" class="btn-link" type="button">Anderen Ausschnitt wählen</button>
-      <div class="up-grid">
-        <label class="up-field"><span class="up-label">Von</span><select id="an-from"></select></label>
-        <label class="up-field"><span class="up-label">Bis</span><select id="an-to"></select></label>
-      </div>
-      <label class="up-field">
-        <span class="up-label">Grösse (längste Kante)</span>
-        <select id="an-size">
-          <option value="360">360 px (klein, für GIF)</option>
-          <option value="480">480 px</option>
-          <option value="720" selected>720 px</option>
-          <option value="1080">1080 px (Video)</option>
-        </select>
-      </label>
-      <div class="up-denoise">
-        <div class="up-row up-result-head"><span class="up-label">Standzeit je Jahrgang</span><span id="an-hold-label" class="up-meta"></span></div>
-        <input id="an-hold" type="range" min="0.3" max="3" step="0.1" value="1.0" aria-label="Standzeit je Jahrgang">
-      </div>
-      <div class="up-denoise">
-        <div class="up-row up-result-head"><span class="up-label">Überblendung</span><span id="an-fade-label" class="up-meta"></span></div>
-        <input id="an-fade" type="range" min="0" max="2" step="0.1" value="0.8" aria-label="Dauer der Überblendung">
-      </div>
-      <div class="up-label">Ausgabe</div>
-      <div class="up-row">
-        <label class="up-check"><input id="an-format-gif" type="radio" name="an-format" checked><span>GIF</span></label>
-        <label class="up-check"><input id="an-format-video" type="radio" name="an-format"><span>Video</span></label>
-        <span id="an-video-note" class="up-hint"></span>
-      </div>
-      <div class="up-row">
-        <button id="an-run" class="btn-primary" type="button">Animation erzeugen</button>
-        <button id="an-cancel" class="btn-secondary" type="button" hidden>Abbrechen</button>
-      </div>
-      <div id="an-progress" class="up-progress" hidden><div id="an-progress-bar" class="up-progress-bar"></div></div>
-      <div id="an-status" class="up-status" aria-live="polite"></div>
-      <div id="an-result" class="up-result" hidden>
-        <div id="an-preview" class="an-preview"></div>
-        <div id="an-meta" class="up-meta"></div>
-        <div class="up-row"><button id="an-download" class="btn-primary" type="button">Herunterladen</button></div>
-      </div>
-    </div>
-  </section>
-
-  <section id="quiz-panel" class="panel qz-panel" hidden aria-label="Quiz">
-    <div class="qz-bar">
-      <select id="qz-mode" class="qz-mode" aria-label="Modus"></select>
-      <span id="qz-status" class="qz-status" aria-live="polite"></span>
-      <span id="qz-score" class="qz-score" aria-label="Punktestand"></span>
-      <button id="qz-start" class="qz-btn" type="button">Start</button>
-      <button id="qz-next" class="qz-btn qz-btn-accent" type="button" hidden>Weiter</button>
-      <button class="panel-close" type="button" aria-label="Schliessen">×</button>
-    </div>
-    <div id="qz-answers" class="qz-answers"></div>
-    <div id="qz-feedback" class="qz-feedback" aria-live="polite"></div>
-  </section>
-
-  <section id="upscale-panel" class="panel" hidden aria-label="Hochskalieren">
-    <div class="panel-head">
-      <h2>Hochskalieren</h2>
-      <button class="panel-close" type="button" aria-label="Schliessen">×</button>
-    </div>
-
-    <div id="up-step1" class="up-step">
-      <label class="up-field">
-        <span class="up-label">Bildstand</span>
-        <select id="up-year"></select>
-      </label>
-      <div id="up-info" class="up-info">–</div>
-      <div id="up-hint" class="up-hint"></div>
-      <progress id="up-capture-progress" class="up-capture-progress" max="1" value="0" hidden></progress>
-      <div class="up-row">
-        <button id="up-capture" class="btn-primary" type="button">Ausschnitt übernehmen</button>
-        <button id="up-direct" class="btn-secondary" type="button" title="Volle Auflösung zusammensetzen und sofort als JPEG speichern">Direkt als JPEG</button>
-        <button id="up-reset" class="btn-link" type="button">Rahmen zurücksetzen</button>
-      </div>
-    </div>
-
-    <div id="up-step2" class="up-step up-body" hidden>
-      <div class="up-source">
-        <canvas id="up-thumb" class="up-thumb" width="160" height="160"></canvas>
-        <div class="up-source-text">
-          <div class="up-label">Quellbild</div>
-          <div id="up-src-meta" class="up-meta"></div>
-          <button id="up-back" class="btn-link" type="button">Anderen Ausschnitt wählen</button>
-        </div>
-      </div>
-
-      <div class="up-label">Methode</div>
-      <div id="up-methods" class="up-methods"></div>
-
-      <div id="up-denoise-row" class="up-denoise">
-        <div class="up-row up-result-head">
-          <span class="up-label">Glättung</span>
-          <span id="up-denoise-label" class="up-meta">50 %</span>
-        </div>
-        <input id="up-denoise" type="range" min="0" max="1" step="0.05" value="0.5" aria-label="Glättung (Rauschunterdrückung)">
-        <div class="up-hint">0 % belässt Körnung und feine Struktur, 100 % glättet Rauschen am stärksten.</div>
-      </div>
-
-      <div class="up-row">
-        <span class="up-label">Faktor</span>
-        <div id="up-factors" class="segmented" role="group" aria-label="Vergrösserungsfaktor"></div>
-      </div>
-      <div id="up-factor-hint" class="up-hint"></div>
-
-      <label class="up-check">
-        <input id="up-polish" type="checkbox" checked>
-        <span class="up-method-text"><span class="up-method-name">Foto-Veredelung</span><span class="up-method-note">Tonwerte strecken, Farben kräftigen, sanft nachschärfen. Für ein einheitliches, druckbares Bild.</span></span>
-      </label>
-
-      <div class="up-row">
-        <button id="up-run" class="btn-primary" type="button">Hochskalieren</button>
-        <button id="up-cancel" class="btn-secondary" type="button" hidden>Abbrechen</button>
-      </div>
-      <div id="up-progress" class="up-progress" hidden><div id="up-progress-bar" class="up-progress-bar"></div></div>
-      <div id="up-status" class="up-status" aria-live="polite"></div>
-
-      <div id="up-result" class="up-result" hidden>
-        <div class="up-row up-result-head">
-          <span class="up-label">Vorher / Nachher</span>
-          <button id="up-fit" class="btn-link" type="button">1:1 anzeigen</button>
-        </div>
-        <div id="up-compare" class="up-compare is-fit">
-          <div class="up-compare-inner">
-            <canvas id="up-after"></canvas>
-            <canvas id="up-before"></canvas>
-            <div class="up-split-line"></div>
-          </div>
-          <input id="up-divider" class="up-divider" type="range" min="0" max="100" value="50" aria-label="Vergleichsposition">
-        </div>
-        <div id="up-result-meta" class="up-meta"></div>
-        <div class="up-row">
-          <button id="up-download" class="btn-primary" type="button">PNG herunterladen</button>
-          <button id="up-download-jpeg" class="btn-secondary" type="button">JPEG herunterladen</button>
-          <button id="up-open" class="btn-secondary" type="button">Im Browser öffnen</button>
-        </div>
-      </div>
+      <p class="fineprint">Luftbilder und Fachdaten © swisstopo, Nutzung gemäss <a href="https://www.geo.admin.ch/de/allgemeine-nutzungsbedingungen-bgdi" target="_blank" rel="noopener">Nutzungsbedingungen BGDI</a>. Karte: MapLibre GL JS. KI-Modell: Real-ESRGAN (BSD-3).</p>
     </div>
   </section>
 

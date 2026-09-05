@@ -1,18 +1,17 @@
-// Einstiegspunkt: Karte, Zeitregler, Suche, Zusatzebenen, Standort.
+// Einstiegspunkt: Karte, Zeitregler, Suche, Ebenen, Standort, Insta-Bild, Orte.
 
 import { Map as MapLibreMap } from '../vendor/maplibre-gl/maplibre-gl.mjs';
 import {
   DEFAULT_CENTER, DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM, MAX_BOUNDS, SWISS_BOUNDS,
-  PLAY_INTERVAL_MS, THEMES, ATTRIBUTION, NATIVE_TILE_ZOOM,
+  PLAY_INTERVAL_MS, OVERLAYS, ATTRIBUTION,
 } from './config.js';
 import { getSwissimageTimestamps, identifyFlightInfo } from './geoadmin.js';
 import { Timeline } from './timeline.js';
-import { Overlays, listThemeLayers } from './overlays.js';
+import { Overlays } from './layers.js';
 import { setupSearch } from './search.js';
-import { setupUpscale } from './upscale-ui.js';
-import { setupAnimate } from './animate-ui.js';
-import { setupQuiz } from './quiz-ui.js';
 import { FrameSelector } from './frame.js';
+import { setupInsta } from './insta-ui.js';
+import { randomPlace } from './places.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -23,26 +22,24 @@ const ui = {
   sliderMin: $('#slider-min'),
   sliderMax: $('#slider-max'),
   sliderCurrent: $('#slider-current'),
-  btnUpscale: $('#btn-upscale'),
-  btnZoomIn: $('#btn-zoom-in'),
-  btnZoomOut: $('#btn-zoom-out'),
-  btnZoomNative: $('#btn-zoom-native'),
-  upscalePanel: $('#upscale-panel'),
-  btnAnimate: $('#btn-animate'),
-  animatePanel: $('#animate-panel'),
-  btnQuiz: $('#btn-quiz'),
-  quizPanel: $('#quiz-panel'),
-  frame: $('#frame'),
   btnPrev: $('#btn-prev'),
   btnNext: $('#btn-next'),
   btnPlay: $('#btn-play'),
   btnLocate: $('#btn-locate'),
   btnLayers: $('#btn-layers'),
+  btnInsta: $('#btn-insta'),
+  btnRandom: $('#btn-random'),
   btnInfo: $('#btn-info'),
   layersPanel: $('#layers-panel'),
-  infoPanel: $('#info-panel'),
-  themes: $('#themes'),
+  layersList: $('#layers-list'),
   layersBadge: $('#layers-badge'),
+  infoPanel: $('#info-panel'),
+  instaPanel: $('#insta-panel'),
+  frame: $('#frame'),
+  placeCard: $('#place-card'),
+  placeName: $('#place-name'),
+  placeSub: $('#place-sub'),
+  placeNext: $('#place-next'),
   attribution: $('#attribution'),
   toast: $('#toast'),
   searchInput: $('#search-input'),
@@ -81,47 +78,38 @@ map.on('error', (e) => {
 
 let timeline = null;
 let overlays = null;
-let upscaleCtl = null;
-let animateCtl = null;
-let quizCtl = null;
+let instaCtl = null;
+let frame = null;
 let flightCache = new Map();
 let metaController = null;
 let metaTimer = null;
 let playTimer = null;
+let userActed = false; // Suche, Zufallsort oder Ziehen: dann kein Sprung zum Standort mehr
+let lastPlace = null;
+
+map.on('dragstart', () => { userActed = true; });
 
 map.on('load', async () => {
   const entries = await getSwissimageTimestamps();
   timeline = new Timeline(map, entries);
   overlays = new Overlays(map);
-  overlays.onChange(updateAttribution);
+  overlays.onChange(updateLayersBadge);
 
   setupSlider();
   setupControls();
   setupLayersPanel();
   setupInfoPanel();
-  const frame = new FrameSelector(map, ui.frame);
-  upscaleCtl = setupUpscale({
+  setupRandom();
+  frame = new FrameSelector(map, ui.frame);
+  instaCtl = setupInsta({
     map, frame,
-    button: ui.btnUpscale,
-    panel: ui.upscalePanel,
-    getEntries: () => timeline.entries,
-    closeOthers: closePanels,
-    onToggle: syncPanelState,
-    toast,
-  });
-  animateCtl = setupAnimate({
-    map, frame,
-    button: ui.btnAnimate,
-    panel: ui.animatePanel,
-    getEntries: () => timeline.entries,
-    closeOthers: closePanels,
-    onToggle: syncPanelState,
-    toast,
-  });
-  quizCtl = setupQuiz({
-    map, timeline,
-    button: ui.btnQuiz,
-    panel: ui.quizPanel,
+    button: ui.btnInsta,
+    panel: ui.instaPanel,
+    getYear: () => {
+      const entry = timeline.current;
+      const info = flightCache.get(metaKey(entry));
+      return { ts: entry.ts, year: info?.year || entry.year };
+    },
     closeOthers: closePanels,
     onToggle: syncPanelState,
     toast,
@@ -130,6 +118,8 @@ map.on('load', async () => {
     input: ui.searchInput,
     results: ui.searchResults,
     onSelect: (hit) => {
+      userActed = true;
+      hidePlaceCard();
       map.flyTo({ center: [hit.lon, hit.lat], zoom: hit.zoom, duration: 1200, essential: true });
     },
   });
@@ -138,7 +128,7 @@ map.on('load', async () => {
   map.on('moveend', scheduleMeta);
   renderYear();
   scheduleMeta();
-  updateAttribution();
+  ui.attribution.textContent = ATTRIBUTION;
   locate({ silent: true });
 });
 
@@ -164,36 +154,17 @@ function setupSlider() {
   });
 }
 
-// Zoom, bei dem ein Kachelpixel genau einem Gerätepixel entspricht (keine
-// digitale Vergrösserung). Auf hochauflösenden Bildschirmen liegt er höher.
-function nativeZoom() {
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
-  return Math.min(MAX_ZOOM, NATIVE_TILE_ZOOM - 1 + Math.log2(dpr));
-}
-
-function setupZoomButtons() {
-  ui.btnZoomIn.addEventListener('click', () => map.zoomIn({ duration: 250 }));
-  ui.btnZoomOut.addEventListener('click', () => map.zoomOut({ duration: 250 }));
-  ui.btnZoomNative.addEventListener('click', () => map.easeTo({ zoom: nativeZoom(), duration: 400 }));
-  const sync = () => {
-    ui.btnZoomNative.classList.toggle('is-active', Math.abs(map.getZoom() - nativeZoom()) < 0.02);
-  };
-  map.on('zoom', sync);
-  sync();
-}
-
 function setupControls() {
-  setupZoomButtons();
   ui.btnPrev.addEventListener('click', () => { stopPlay(); timeline.prev(); });
   ui.btnNext.addEventListener('click', () => { stopPlay(); timeline.next(); });
   ui.btnPlay.addEventListener('click', () => (playTimer ? stopPlay() : startPlay()));
-  ui.btnLocate.addEventListener('click', () => locate({ silent: false }));
+  ui.btnLocate.addEventListener('click', () => { hidePlaceCard(); locate({ silent: false, force: true }); });
   document.addEventListener('keydown', (ev) => {
-    if (ev.target === ui.searchInput) return;
+    if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement) return;
     if (ev.key === 'ArrowLeft') { stopPlay(); timeline.prev(); }
     else if (ev.key === 'ArrowRight') { stopPlay(); timeline.next(); }
     else if (ev.key === ' ') { ev.preventDefault(); playTimer ? stopPlay() : startPlay(); }
-    else if (ev.key === 'Escape') { closePanels(); }
+    else if (ev.key === 'Escape') { closePanels(); hidePlaceCard(); }
   });
 }
 
@@ -220,7 +191,6 @@ function renderYear() {
   const info = flightCache.get(metaKey(entry));
   const big = ui.yearBig;
   if (info === undefined) {
-    // Noch nicht ermittelt: Jahrgang anzeigen, gedämpft.
     big.textContent = String(entry.year);
     big.classList.add('is-provisional');
     ui.yearSub.textContent = 'Bildaufnahme vom: …';
@@ -239,7 +209,6 @@ function renderYear() {
 // Aufnahmejahr aus den Metadaten (für die Bildmitte)
 
 function metaKey(entry, center = map.getCenter()) {
-  // Auf ca. 100 m gerundet, damit kleine Verschiebungen den Cache nutzen.
   return `${entry.ts}|${center.lng.toFixed(3)}|${center.lat.toFixed(3)}`;
 }
 
@@ -271,14 +240,13 @@ async function fetchMeta() {
   prefetchNeighbours(center);
 }
 
-// Nachbar-Jahrgänge im Hintergrund abfragen, damit der Wechsel sofort beschriftet ist.
 function prefetchNeighbours(center) {
   for (const i of [timeline.index - 1, timeline.index + 1]) {
     const e = timeline.entries[i];
     if (!e) continue;
     const key = metaKey(e, center);
     if (flightCache.has(key)) continue;
-    flightCache.set(key, undefined); // Platzhalter gegen Doppelabfragen
+    flightCache.set(key, undefined);
     identifyFlightInfo(center.lng, center.lat, e)
       .then((info) => { flightCache.set(key, info); if (timeline.current === e) renderYear(); })
       .catch(() => flightCache.delete(key));
@@ -292,7 +260,7 @@ function inSwitzerland(lng, lat) {
   return lng >= SWISS_BOUNDS[0] && lng <= SWISS_BOUNDS[2] && lat >= SWISS_BOUNDS[1] && lat <= SWISS_BOUNDS[3];
 }
 
-function locate({ silent }) {
+function locate({ silent, force = false }) {
   if (!('geolocation' in navigator)) {
     if (!silent) toast('Standortbestimmung nicht verfügbar');
     return;
@@ -301,6 +269,7 @@ function locate({ silent }) {
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       ui.btnLocate.classList.remove('is-busy');
+      if (!force && userActed) return; // der Nutzer ist schon anderswo unterwegs
       const { longitude: lng, latitude: lat } = pos.coords;
       if (!inSwitzerland(lng, lat)) {
         toast('Der Standort liegt ausserhalb der Schweiz – gezeigt wird Bern.');
@@ -317,105 +286,33 @@ function locate({ silent }) {
 }
 
 // ---------------------------------------------------------------------------
-// Zusatzebenen
+// Ebenen: Ortsnamen, Gelände
 
 function setupLayersPanel() {
   ui.btnLayers.addEventListener('click', () => togglePanel(ui.layersPanel));
   ui.layersPanel.querySelector('.panel-close').addEventListener('click', () => togglePanel(ui.layersPanel, false));
 
-  for (const theme of THEMES) {
-    const details = document.createElement('details');
-    details.className = 'theme';
-    details.dataset.theme = theme.key;
-    const summary = document.createElement('summary');
-    summary.innerHTML = `<span class="theme-title"></span><span class="theme-desc"></span><span class="theme-count"></span>`;
-    summary.querySelector('.theme-title').textContent = theme.label;
-    summary.querySelector('.theme-desc').textContent = theme.description;
-    details.appendChild(summary);
-    const list = document.createElement('ul');
-    list.className = 'layer-list';
-    details.appendChild(list);
-    details.addEventListener('toggle', () => { if (details.open) fillTheme(theme, list, summary); }, { once: false });
-    ui.themes.appendChild(details);
-  }
-}
-
-const filledThemes = new Set();
-
-async function fillTheme(theme, list, summary) {
-  if (filledThemes.has(theme.key)) return;
-  filledThemes.add(theme.key);
-  list.innerHTML = '<li class="layer-note">Ebenen werden geladen …</li>';
-  let layers;
-  try {
-    layers = await listThemeLayers(theme.key);
-  } catch (err) {
-    filledThemes.delete(theme.key);
-    list.innerHTML = '<li class="layer-note">Verzeichnis des Geoportals nicht erreichbar.</li>';
-    console.warn(err);
-    return;
-  }
-  summary.querySelector('.theme-count').textContent = layers.length ? String(layers.length) : '';
-  list.innerHTML = '';
-  if (!layers.length) {
-    list.innerHTML = '<li class="layer-note">Keine passenden Ebenen gefunden.</li>';
-    return;
-  }
-  for (const l of layers) list.appendChild(renderLayerItem(l));
-}
-
-function renderLayerItem(l) {
-  const li = document.createElement('li');
-  li.className = 'layer-item';
-  const row = document.createElement('label');
-  row.className = 'layer-row';
-  const cb = document.createElement('input');
-  cb.type = 'checkbox';
-  cb.checked = overlays.isActive(l.id);
-  const name = document.createElement('span');
-  name.className = 'layer-name';
-  name.textContent = l.label;
-  row.append(cb, name);
-  li.appendChild(row);
-
-  const opWrap = document.createElement('div');
-  opWrap.className = 'layer-opacity';
-  opWrap.hidden = !cb.checked;
-  const op = document.createElement('input');
-  op.type = 'range';
-  op.min = '0'; op.max = '1'; op.step = '0.05';
-  op.value = String(overlays.active.get(l.id)?.opacity ?? 0.7);
-  op.setAttribute('aria-label', `Deckkraft ${l.label}`);
-  const opLabel = document.createElement('span');
-  opLabel.textContent = `${Math.round(Number(op.value) * 100)} %`;
-  opWrap.append(op, opLabel);
-  li.appendChild(opWrap);
-
-  cb.addEventListener('change', async () => {
-    if (cb.checked) {
+  for (const def of OVERLAYS) {
+    const row = document.createElement('label');
+    row.className = 'switch-row';
+    row.innerHTML = '<span class="switch-text"><span class="switch-label"></span><span class="switch-note"></span></span>'
+      + '<input type="checkbox" role="switch" class="switch">';
+    row.querySelector('.switch-label').textContent = def.label;
+    row.querySelector('.switch-note').textContent = def.note;
+    const cb = row.querySelector('input');
+    cb.addEventListener('change', async () => {
       cb.disabled = true;
       try {
-        await overlays.add(l.id, Number(op.value));
-        op.value = String(overlays.active.get(l.id)?.opacity ?? Number(op.value));
-        opLabel.textContent = `${Math.round(Number(op.value) * 100)} %`;
-        opWrap.hidden = false;
+        await overlays.toggle(def.key, cb.checked);
       } catch (err) {
         cb.checked = false;
-        toast(`Ebene konnte nicht geladen werden: ${l.label}`);
+        toast(`Ebene konnte nicht geladen werden: ${def.label}`);
         console.warn(err);
       }
       cb.disabled = false;
-    } else {
-      overlays.remove(l.id);
-      opWrap.hidden = true;
-    }
-    updateLayersBadge();
-  });
-  op.addEventListener('input', () => {
-    overlays.setOpacity(l.id, Number(op.value));
-    opLabel.textContent = `${Math.round(Number(op.value) * 100)} %`;
-  });
-  return li;
+    });
+    ui.layersList.appendChild(row);
+  }
 }
 
 function updateLayersBadge() {
@@ -424,9 +321,28 @@ function updateLayersBadge() {
   ui.layersBadge.hidden = !n;
 }
 
-function updateAttribution() {
-  const extra = overlays ? overlays.attributions().filter((a) => a && !/swisstopo/i.test(a)) : [];
-  ui.attribution.textContent = [ATTRIBUTION, ...extra].join(' · ');
+// ---------------------------------------------------------------------------
+// Bekannte Orte von oben
+
+function setupRandom() {
+  const go = () => {
+    userActed = true;
+    closePanels();
+    stopPlay();
+    const p = randomPlace(lastPlace);
+    lastPlace = p;
+    map.flyTo({ center: [p.lng, p.lat], zoom: p.zoom, duration: 1800, curve: 1.6, essential: true });
+    ui.placeName.textContent = p.name;
+    ui.placeSub.textContent = p.sub;
+    ui.placeCard.hidden = false;
+  };
+  ui.btnRandom.addEventListener('click', go);
+  ui.placeNext.addEventListener('click', go);
+  ui.placeCard.querySelector('.panel-close').addEventListener('click', hidePlaceCard);
+}
+
+function hidePlaceCard() {
+  ui.placeCard.hidden = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -447,20 +363,19 @@ function togglePanel(panel, open) {
 }
 
 function closePanels() {
+  hidePlaceCard();
   ui.layersPanel.hidden = true;
   ui.infoPanel.hidden = true;
   ui.btnLayers.setAttribute('aria-expanded', 'false');
   ui.btnInfo.setAttribute('aria-expanded', 'false');
-  if (upscaleCtl?.isOpen()) upscaleCtl.close();
-  if (animateCtl?.isOpen()) animateCtl.close();
-  if (quizCtl?.isOpen()) quizCtl.close();
+  if (instaCtl?.isOpen()) instaCtl.close();
   syncPanelState();
 }
 
 // Auf kleinen Bildschirmen verdecken offene Panels die Seitenknöpfe; diese
 // werden dann ausgeblendet (Schliessen über das × im Panel).
 function syncPanelState() {
-  const anyOpen = [ui.layersPanel, ui.infoPanel, ui.upscalePanel, ui.animatePanel, ui.quizPanel].some((p) => !p.hidden);
+  const anyOpen = [ui.layersPanel, ui.infoPanel, ui.instaPanel].some((p) => !p.hidden);
   document.body.classList.toggle('has-panel', anyOpen);
 }
 
@@ -477,4 +392,6 @@ window.zeitreise = {
   map,
   get timeline() { return timeline; },
   get overlays() { return overlays; },
+  get frame() { return frame; },
+  get lastPlace() { return lastPlace; },
 };

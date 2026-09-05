@@ -1,6 +1,7 @@
 // Verschieb- und ziehbarer Rahmen über der Karte. Der Rahmen ist geografisch
 // verankert: Beim Verschieben oder Zoomen der Karte bleibt er an derselben Stelle
 // am Boden. Vier Eckgriffe ändern die Grösse, Ziehen in der Fläche verschiebt ihn.
+// Optional hält er ein festes Seitenverhältnis (z. B. 1:1 oder 4:5).
 
 const EARTH = 40075016.686;
 const MIN_PX = 36;
@@ -15,6 +16,7 @@ export class FrameSelector {
     this.el = el;
     this.box = el.querySelector('.frame-box');
     this.bounds = null;      // {west, south, east, north}
+    this.aspect = null;      // Breite / Höhe in Bildschirmpixeln, null = frei
     this.visible = false;
     this.listeners = new Set();
     this._raf = 0;
@@ -25,19 +27,29 @@ export class FrameSelector {
   onChange(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   _emit() { for (const fn of this.listeners) fn(this.bounds); }
 
+  /** Seitenverhältnis (Breite/Höhe) setzen; der Rahmen wird um seine Mitte angepasst. */
+  setAspect(aspect) {
+    this.aspect = aspect || null;
+    if (!this.bounds) return;
+    const r = this.rect();
+    const fit = this._fitAspect({ x: r.x, y: r.y, w: r.w, h: r.h }, true);
+    this._setFromRect(fit);
+  }
+
   /**
-   * Quadrat um die Kartenmitte: höchstens `meters` Kantenlänge, aber nie grösser
-   * als 60 % der sichtbaren Kartenbreite, damit die Griffe erreichbar bleiben.
+   * Rechteck um die Kartenmitte: höchstens `meters` Kantenlänge, aber nie grösser
+   * als 60 % der sichtbaren Karte, damit die Griffe erreichbar bleiben.
    */
-  defaultBounds(meters = 160) {
+  defaultBounds(meters = 120) {
     const center = this.map.getCenter();
     const metersPerCss = (EARTH * Math.cos((center.lat * Math.PI) / 180)) / (512 * 2 ** this.map.getZoom());
     const el = this.map.getContainer();
-    const maxPx = Math.min(el.clientWidth, el.clientHeight) * 0.6;
-    const half = Math.min(meters / metersPerCss, maxPx) / 2;
+    const a = this.aspect || 1;
+    let w = Math.min(meters / metersPerCss, el.clientWidth * 0.6, el.clientHeight * 0.6 * a);
+    let h = w / a;
     const c = this.map.project(center);
-    const tl = this.map.unproject([c.x - half, c.y - half]);
-    const br = this.map.unproject([c.x + half, c.y + half]);
+    const tl = this.map.unproject([c.x - w / 2, c.y - h / 2]);
+    const br = this.map.unproject([c.x + w / 2, c.y + h / 2]);
     return { west: tl.lng, north: tl.lat, east: br.lng, south: br.lat };
   }
 
@@ -54,13 +66,19 @@ export class FrameSelector {
     this.el.hidden = true;
   }
 
-  reset(meters = 160) {
+  reset(meters = 120) {
     this.bounds = this.defaultBounds(meters);
     this.render();
     this._emit();
   }
 
   getBounds() { return this.bounds ? { ...this.bounds } : null; }
+
+  /** Mitte des Rahmens als {lng, lat}. */
+  center() {
+    const b = this.bounds;
+    return b ? { lng: (b.west + b.east) / 2, lat: (b.north + b.south) / 2 } : null;
+  }
 
   /** Bildschirmrechteck des Rahmens (CSS-Pixel relativ zur Karte). */
   rect() {
@@ -87,6 +105,20 @@ export class FrameSelector {
     this._raf = requestAnimationFrame(() => this._emit());
   }
 
+  /** Rechteck aufs Seitenverhältnis bringen; um die Mitte oder an einer Ecke verankert. */
+  _fitAspect(r, centered, mode = '') {
+    if (!this.aspect) return r;
+    const a = this.aspect;
+    // Die grössere der beiden Ausdehnungen bestimmt die Grösse.
+    let w = r.w, h = r.h;
+    if (w / a >= h) h = w / a; else w = h * a;
+    if (centered) return { x: r.x + (r.w - w) / 2, y: r.y + (r.h - h) / 2, w, h };
+    // An der gegenüberliegenden Ecke des gezogenen Griffs verankern.
+    const x = mode.includes('w') ? r.x + r.w - w : r.x;
+    const y = mode.includes('n') ? r.y + r.h - h : r.y;
+    return { x, y, w, h };
+  }
+
   _bindPointer() {
     let drag = null;
     const onMove = (ev) => {
@@ -102,7 +134,7 @@ export class FrameSelector {
         if (drag.mode.includes('e')) x1 = Math.max(x0 + MIN_PX, x1 + dx);
         if (drag.mode.includes('n')) y0 = Math.min(y1 - MIN_PX, y0 + dy);
         if (drag.mode.includes('s')) y1 = Math.max(y0 + MIN_PX, y1 + dy);
-        r = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+        r = this._fitAspect({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, false, drag.mode);
       }
       this._setFromRect(r);
       ev.preventDefault();
