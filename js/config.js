@@ -41,33 +41,33 @@ export const SETTLE_TIMEOUT_MS = 2500;
 // Intervall des automatischen Abspielens (ms).
 export const PLAY_INTERVAL_MS = 1400;
 
-// Themen der Zusatzebenen. Die Ebenen selbst werden aus dem
-// Verzeichnis des Geoportals gelesen und über diese Muster gefiltert.
-export const THEMES = [
+// Einblendbare Ebenen über dem Luftbild.
+export const OVERLAYS = [
   {
-    key: 'wasser',
-    label: 'Wasser',
-    description: 'Gewässer, Seen und Flüsse, Hochwasser- und Grundwasserdaten',
-    pattern: /gew[äa]sser|\bseen?\b|fl[üu]ss|hochwasser|grundwasser|\bwasser(?!stoff)|hydrolog|abfluss|\bquellen?\b|[üu]berschwemm|fliess|wasserstand|pegel/i,
+    key: 'names',
+    label: 'Ortsnamen',
+    note: 'Geografische Namen (swissNAMES3D)',
+    // Beschriftungsebene des Geoportals; als WMS ausgeliefert.
+    wms: 'ch.swisstopo.swissnames3d',
+    opacity: 1,
   },
   {
-    key: 'laser',
-    label: 'Laser & Gelände',
-    description: 'LiDAR-Produkte, Höhen- und Oberflächenmodelle, Reliefschattierungen',
-    pattern: /lidar|laser|swisssurface3d|swissalti3d|h[öo]henmodell|oberfl[äa]chenmodell|gel[äa]ndemodell|relief|schummerung|hillshade|\bdtm\b|\bdom\b|\bdsm\b|h[öo]henkurven|gel[äa]nde|terrain|punktwolke|\bh[öo]hen\b/i,
-  },
-  {
-    key: 'radar',
-    label: 'Radar & Wetter',
-    description: 'Niederschlagsradar und verwandte Messdaten',
-    pattern: /radar|niederschlag|wetter|meteo|hagel|blitz|\bwind\b|klima|temperatur/i,
-  },
-  {
-    key: 'telekom',
-    label: 'Telekommunikation',
-    description: 'Mobilfunk- und Sendeanlagen',
-    pattern: /mobilfunk|sendeanlage|antenne|telekom|\bfunk|rundfunk|\b5g\b|breitband|glasfaser|\bsender\b|kommunikation/i,
+    key: 'terrain',
+    label: 'Gelände',
+    note: 'Reliefschattierung aus swissALTI3D',
+    wmts: 'ch.swisstopo.swissalti3d-reliefschattierung',
+    wms: 'ch.swisstopo.swissalti3d-reliefschattierung',
+    opacity: 0.45,
   },
 ];
+
+// Ebenen für die Ortsbestimmung eines Ausschnitts (Insta-Bild).
+export const NAMES_LAYER = 'ch.swisstopo.swissnames3d';
+export const MUNICIPALITY_LAYER = 'ch.swisstopo.swissboundaries3d-gemeinde-flaeche.fill';
+
+// Insta-Bild: längste Kante des Quellbilds (wird 2-fach hochgerechnet).
+export const INSTA_SOURCE_EDGE = 1024;
+// Glättung des kompakten Real-ESRGAN (0 = keine, 1 = maximal).
+export const INSTA_DENOISE = 0.5;
 
 export const ATTRIBUTION = '© swisstopo';
