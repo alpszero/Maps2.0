@@ -15,6 +15,7 @@ export function setupInsta({ map, button, panel, frame, getYear, closeOthers, on
     step2: $('#in-step2', panel),
     result: $('#in-result', panel),
     name: $('#in-name', panel),
+    tag: $('#in-tag', panel),
     aspect1: $('#in-aspect-1', panel),
     aspect45: $('#in-aspect-45', panel),
     label: $('#in-label', panel),
@@ -33,7 +34,7 @@ export function setupInsta({ map, button, panel, frame, getYear, closeOthers, on
   };
   const state = {
     open: false, controller: null, lookup: null, lookupTimer: null,
-    place: null, nameDirty: false, result: null, previewUrl: null,
+    place: null, nameDirty: false, tagDirty: false, result: null, previewUrl: null,
     blobs: {}, maxEdge: 4096, busy: false,
   };
   maxCanvasEdge().then((edge) => { state.maxEdge = edge; updateInfo(); });
@@ -49,7 +50,9 @@ export function setupInsta({ map, button, panel, frame, getYear, closeOthers, on
     frame.show();
     showStep(1);
     state.nameDirty = false;
+    state.tagDirty = false;
     ui.name.value = '';
+    ui.tag.value = '';
     scheduleLookup();
     onToggle?.();
   }
@@ -113,15 +116,17 @@ export function setupInsta({ map, button, panel, frame, getYear, closeOthers, on
     try {
       const place = await lookupPlace(b, { signal: state.lookup.signal });
       state.place = place;
-      if (known) place.name = known.name;
       if (!state.nameDirty) ui.name.value = place.name;
+      if (!state.tagDirty) ui.tag.value = place.tagline;
     } catch (err) {
       if (err?.name === 'AbortError') return;
       state.place = null;
-      if (known && !state.nameDirty) ui.name.value = known.name;
+      if (!state.nameDirty) ui.name.value = known?.name || 'Schweiz';
+      if (!state.tagDirty) ui.tag.value = known?.tag || '';
     }
   }
   ui.name.addEventListener('input', () => { state.nameDirty = ui.name.value.trim() !== ''; });
+  ui.tag.addEventListener('input', () => { state.tagDirty = ui.tag.value.trim() !== ''; });
 
   // Bild erstellen
   ui.run.addEventListener('click', async () => {
@@ -130,7 +135,8 @@ export function setupInsta({ map, button, panel, frame, getYear, closeOthers, on
     state.controller?.abort();
     state.controller = new AbortController();
     const signal = state.controller.signal;
-    const name = ui.name.value.trim();
+    const name = ui.name.value.trim() || state.place?.name || 'Schweiz';
+    const tagline = ui.tag.value.trim();
     const y = getYear();
     showStep(2);
     ui.progressBar.style.width = '0%';
@@ -139,7 +145,7 @@ export function setupInsta({ map, button, panel, frame, getYear, closeOthers, on
     try {
       const res = await createInstaImage({
         bounds, timestamp: y.ts, name,
-        subtitle: subtitleFor(state.place, name),
+        subtitle: subtitleFor(state.place, name), tagline,
         year: y.year, maxEdge: state.maxEdge, label: ui.label.checked, signal,
         onStatus: (s) => { ui.status.textContent = s; },
         onProgress: (p) => { ui.progressBar.style.width = `${Math.round(p * 100)}%`; },
